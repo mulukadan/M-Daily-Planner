@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /c/Users/Administrator/AndroidStudioProjects/DayFlow/app/src/main/java/com/example/dayflow)",
+      "Bash(mkdir -p /c/Users/Administrator/AndroidStudioProjects/DayFlow/app/src/main/res/values)",
+      "Bash(mkdir -p /c/Users/Administrator/AndroidStudioProjects/DayFlow/app/src/test/java/com/example/dayflow)",
+      "Bash(mkdir -p /c/Users/Administrator/AndroidStudioProjects/DayFlow/app/src/androidTest/java/com/example/dayflow)",
+      "Bash(mkdir -p /c/Users/Administrator/AndroidStudioProjects/DayFlow/gradle/wrapper)"
+    ]
+  }
+}
