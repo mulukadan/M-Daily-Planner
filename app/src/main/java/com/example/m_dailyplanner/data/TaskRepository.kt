@@ -10,11 +10,15 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun getTaskById(id: Int): Task? = taskDao.getTaskById(id)
 
+    fun getTaskByIdFlow(id: Int): Flow<Task?> = taskDao.getTaskByIdFlow(id)
+
     suspend fun getPendingTasksForDate(date: String): List<Task> = taskDao.getPendingTasksForDate(date)
 
     suspend fun insertTask(task: Task): Long = taskDao.insertTask(task)
 
     suspend fun updateTask(task: Task) = taskDao.updateTask(task)
+
+    suspend fun updateTasks(tasks: List<Task>) = taskDao.updateTasks(tasks)
 
     suspend fun deleteTask(task: Task) = taskDao.deleteTask(task)
 

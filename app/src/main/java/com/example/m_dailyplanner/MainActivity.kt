@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -24,6 +25,7 @@ import com.example.m_dailyplanner.data.TaskRepository
 import com.example.m_dailyplanner.ui.DayDetailScreen
 import com.example.m_dailyplanner.ui.HomeScreen
 import com.example.m_dailyplanner.ui.OnboardingScreen
+import com.example.m_dailyplanner.ui.TaskDetailScreen
 import com.example.m_dailyplanner.ui.theme.MDailyPlannerTheme
 import com.example.m_dailyplanner.viewmodel.TaskViewModel
 import com.example.m_dailyplanner.viewmodel.TaskViewModelFactory
@@ -66,16 +68,33 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onDayClick = { date ->
                                     navController.navigate("detail/$date")
+                                },
+                                onTaskClick = { taskId ->
+                                    navController.navigate("task_detail/$taskId")
                                 }
                             )
                         }
                         composable(
                             "detail/{date}",
-                            arguments = listOf(navArgument("date") { })
+                            arguments = listOf(navArgument("date") { type = NavType.StringType })
                         ) { backStackEntry ->
                             val date = backStackEntry.arguments?.getString("date") ?: ""
                             DayDetailScreen(
                                 date = date,
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onTaskClick = { taskId ->
+                                    navController.navigate("task_detail/$taskId")
+                                }
+                            )
+                        }
+                        composable(
+                            "task_detail/{taskId}",
+                            arguments = listOf(navArgument("taskId") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val taskId = backStackEntry.arguments?.getInt("taskId") ?: -1
+                            TaskDetailScreen(
+                                taskId = taskId,
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() }
                             )

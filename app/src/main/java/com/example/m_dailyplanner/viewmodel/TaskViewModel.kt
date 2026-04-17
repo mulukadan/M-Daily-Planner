@@ -15,7 +15,8 @@ import java.time.format.DateTimeFormatter
 enum class SortOption(val displayName: String) {
     PRIORITY("Priority"),
     TIME("Time"),
-    CREATION_DATE("Creation Date")
+    CREATION_DATE("Creation Date"),
+    MANUAL("Manual")
 }
 
 class TaskViewModel(
@@ -27,10 +28,7 @@ class TaskViewModel(
     private val _selectedDate = MutableStateFlow(LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
 
-    private val _selectedCategory = MutableStateFlow("All")
-    val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
-
-    private val _sortOption = MutableStateFlow(SortOption.CREATION_DATE)
+    private val _sortOption = MutableStateFlow(SortOption.MANUAL)
     val sortOption: StateFlow<SortOption> = _sortOption.asStateFlow()
 
     val allTasks: StateFlow<List<Task>> = repository.getAllTasks()
@@ -41,12 +39,9 @@ class TaskViewModel(
         )
 
     val filteredTasks: StateFlow<List<Task>> = combine(
-        allTasks, _selectedDate, _selectedCategory, _sortOption
-    ) { tasks, date, category, sort ->
-        var filtered = tasks.filter { it.date == date }
-        if (category != "All") {
-            filtered = filtered.filter { it.category == category }
-        }
+        allTasks, _selectedDate, _sortOption
+    ) { tasks, date, sort ->
+        val filtered = tasks.filter { it.date == date }
         
         when (sort) {
             SortOption.PRIORITY -> filtered.sortedBy { 
@@ -54,6 +49,7 @@ class TaskViewModel(
             }
             SortOption.TIME -> filtered.sortedBy { it.time.ifEmpty { "23:59" } }
             SortOption.CREATION_DATE -> filtered.sortedByDescending { it.createdAt }
+            SortOption.MANUAL -> filtered.sortedBy { it.position }
         }
     }.stateIn(
         scope = viewModelScope,
@@ -79,10 +75,6 @@ class TaskViewModel(
         _selectedDate.value = date
     }
 
-    fun setCategory(category: String) {
-        _selectedCategory.value = category
-    }
-
     fun setSortOption(option: SortOption) {
         _sortOption.value = option
     }
@@ -90,12 +82,19 @@ class TaskViewModel(
     fun getTasksForDate(date: String): Flow<List<Task>> =
         repository.getTasksForDate(date)
 
+    fun getTaskById(taskId: Int): Flow<Task?> = repository.getTaskByIdFlow(taskId)
+
     fun addTask(task: Task) {
         viewModelScope.launch {
-            val id = repository.insertTask(task)
-            val newTask = task.copy(id = id.toInt())
-            if (newTask.reminderEnabled && newTask.time.isNotEmpty()) {
-                ReminderScheduler.scheduleReminder(getApplication(), newTask)
+            // Find max position for the date
+            val currentTasks = repository.getTasksForDate(task.date).firstOrNull() ?: emptyList()
+            val maxPos = currentTasks.maxOfOrNull { it.position } ?: -1
+            val newTaskWithPos = task.copy(position = maxPos + 1)
+            
+            val id = repository.insertTask(newTaskWithPos)
+            val finalTask = newTaskWithPos.copy(id = id.toInt())
+            if (finalTask.reminderEnabled && finalTask.time.isNotEmpty()) {
+                ReminderScheduler.scheduleReminder(getApplication(), finalTask)
             }
         }
     }
@@ -110,6 +109,15 @@ class TaskViewModel(
             } else {
                 ReminderScheduler.cancelReminder(getApplication(), task.id)
             }
+        }
+    }
+
+    fun updateTaskOrder(tasks: List<Task>) {
+        viewModelScope.launch {
+            val updatedTasks = tasks.mapIndexed { index, task ->
+                task.copy(position = index)
+            }
+            repository.updateTasks(updatedTasks)
         }
     }
 

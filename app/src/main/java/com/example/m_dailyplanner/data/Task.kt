@@ -13,8 +13,8 @@ data class Task(
     val time: String,            // Format: "HH:mm", empty if not set
     val reminderEnabled: Boolean,
     val status: String,          // TaskStatus enum name
-    val category: String = "Work",
     val priority: String = "Medium",
+    val position: Int = 0,       // New field for manual sorting
     val createdAt: Long = System.currentTimeMillis()
 )
 
