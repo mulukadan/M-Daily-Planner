@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters
 import com.example.m_dailyplanner.data.DataStoreManager
 import com.example.m_dailyplanner.data.TaskDatabase
 import com.example.m_dailyplanner.data.TaskRepository
+import com.example.m_dailyplanner.sync.FirestoreSync
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -16,7 +17,7 @@ class CarryForwardWorker(
 
     override suspend fun doWork(): Result {
         val database = TaskDatabase.getDatabase(applicationContext)
-        val repository = TaskRepository(database.taskDao())
+        val repository = TaskRepository(database.taskDao(), FirestoreSync())
         val dataStoreManager = DataStoreManager(applicationContext)
 
         val yesterday = LocalDate.now().minusDays(1)

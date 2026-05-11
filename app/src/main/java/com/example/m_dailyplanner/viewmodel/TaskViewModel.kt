@@ -38,6 +38,21 @@ class TaskViewModel(
             initialValue = emptyList()
         )
 
+    val pendingTasksByPriority: StateFlow<List<Task>> = allTasks
+        .map { tasks ->
+            tasks
+                .filter { it.status != TaskStatus.COMPLETED.name }
+                .sortedWith(compareBy(
+                    { try { TaskPriority.valueOf(it.priority.uppercase()).ordinal } catch (e: Exception) { 1 } },
+                    { it.date }
+                ))
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
+
     val filteredTasks: StateFlow<List<Task>> = combine(
         allTasks, _selectedDate, _sortOption
     ) { tasks, date, sort ->

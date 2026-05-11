@@ -6,6 +6,7 @@ import android.content.Intent
 import com.example.m_dailyplanner.data.TaskDatabase
 import com.example.m_dailyplanner.data.TaskRepository
 import com.example.m_dailyplanner.data.TaskStatus
+import com.example.m_dailyplanner.sync.FirestoreSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,7 +29,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
     private fun markTaskAsDone(context: Context, taskId: Int) {
         val database = TaskDatabase.getDatabase(context)
-        val repository = TaskRepository(database.taskDao())
+        val repository = TaskRepository(database.taskDao(), FirestoreSync())
         
         CoroutineScope(Dispatchers.IO).launch {
             repository.getTaskById(taskId)?.let { task ->
@@ -41,7 +42,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
     private fun snoozeTask(context: Context, taskId: Int) {
         val database = TaskDatabase.getDatabase(context)
-        val repository = TaskRepository(database.taskDao())
+        val repository = TaskRepository(database.taskDao(), FirestoreSync())
 
         CoroutineScope(Dispatchers.IO).launch {
             repository.getTaskById(taskId)?.let { task ->

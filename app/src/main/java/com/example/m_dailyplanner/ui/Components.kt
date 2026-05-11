@@ -49,7 +49,8 @@ fun TaskItem(
     onTaskClick: () -> Unit,
     onMoveToDate: (String) -> Unit = {},
     enableLongClick: Boolean = true,
-    showDragHandle: Boolean = false
+    showDragHandle: Boolean = false,
+    showDate: Boolean = false
 ) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -85,6 +86,24 @@ fun TaskItem(
         "medium" -> Color(0xFFF57C00)
         "low" -> Color(0xFF388E3C)
         else -> MaterialTheme.colorScheme.outline
+    }
+
+    val (dateLabel, dateCategory) = remember(task.date) {
+        val taskDate = runCatching { LocalDate.parse(task.date) }.getOrNull()
+        val today = LocalDate.now()
+        val label = when (taskDate) {
+            today -> "Today"
+            today.plusDays(1) -> "Tomorrow"
+            today.minusDays(1) -> "Yesterday"
+            else -> taskDate?.format(DateTimeFormatter.ofPattern("d MMM yyyy")) ?: task.date
+        }
+        val category = when {
+            taskDate == null -> "neutral"
+            taskDate.isBefore(today) -> "past"
+            taskDate.isEqual(today) -> "today"
+            else -> "future"
+        }
+        label to category
     }
 
     Card(
@@ -164,6 +183,31 @@ fun TaskItem(
                             text = task.time,
                             style = MaterialTheme.typography.labelMedium,
                             color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                if (showDate) {
+                    val dateTint = when (dateCategory) {
+                        "past" -> MaterialTheme.colorScheme.error
+                        "today" -> MaterialTheme.colorScheme.primary
+                        "future" -> Color(0xFF388E3C)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CalendarToday,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = dateTint
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = dateLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = dateTint
                         )
                     }
                 }
@@ -466,8 +510,18 @@ fun AddTaskDialog(
                         .clickable { showTimePicker = true },
                     enabled = false,
                     trailingIcon = {
-                        IconButton(onClick = { showTimePicker = true }) {
-                            Icon(Icons.Default.AccessTime, contentDescription = "Select Time")
+                        Row {
+                            if (time.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    time = ""
+                                    reminderEnabled = false
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear Time")
+                                }
+                            }
+                            IconButton(onClick = { showTimePicker = true }) {
+                                Icon(Icons.Default.AccessTime, contentDescription = "Select Time")
+                            }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
@@ -492,15 +546,17 @@ fun AddTaskDialog(
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = reminderEnabled,
-                        onCheckedChange = { reminderEnabled = it }
-                    )
-                    Text("Enable Reminder")
+                if (time.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = reminderEnabled,
+                            onCheckedChange = { reminderEnabled = it }
+                        )
+                        Text("Enable Alarm")
+                    }
                 }
             }
         },
@@ -739,8 +795,18 @@ fun EditTaskDialog(
                         .clickable { showTimePicker = true },
                     enabled = false,
                     trailingIcon = {
-                        IconButton(onClick = { showTimePicker = true }) {
-                            Icon(Icons.Default.AccessTime, contentDescription = "Select Time")
+                        Row {
+                            if (time.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    time = ""
+                                    reminderEnabled = false
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear Time")
+                                }
+                            }
+                            IconButton(onClick = { showTimePicker = true }) {
+                                Icon(Icons.Default.AccessTime, contentDescription = "Select Time")
+                            }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
@@ -768,12 +834,14 @@ fun EditTaskDialog(
                     }
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Checkbox(checked = reminderEnabled, onCheckedChange = { reminderEnabled = it })
-                    Text("Enable Reminder")
+                if (time.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Checkbox(checked = reminderEnabled, onCheckedChange = { reminderEnabled = it })
+                        Text("Enable Alarm")
+                    }
                 }
             }
         },

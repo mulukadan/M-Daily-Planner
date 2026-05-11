@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "699261682359",
+    "project_id": "m-daily-planner",
+    "storage_bucket": "m-daily-planner.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699261682359:android:2810fbd382422565448332",
+        "android_client_info": {
+          "package_name": "com.example.m_dailyplanner"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "699261682359-l6o22k5cob035b8s651sec4mduhf8ics.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.m_dailyplanner",
+            "certificate_hash": "14449edce96c05827171a462d5de5c21c268a2d3"
+          }
+        },
+        {
+          "client_id": "699261682359-iht6jkerm5b3qulrud93fsdhrlcr3652.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDthyd9tQskflipLGx_689LpN-WjptiBKg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "699261682359-iht6jkerm5b3qulrud93fsdhrlcr3652.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

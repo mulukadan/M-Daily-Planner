@@ -6,14 +6,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.PendingActions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,17 +28,24 @@ import com.example.m_dailyplanner.viewmodel.TaskViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
+private val DotColorAllDone = Color(0xFF4CAF50)
+private val DotColorPartial = Color(0xFFFFA726)
+private val DotColorNoneDone = Color(0xFFEF5350)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: TaskViewModel,
     onDayClick: (String) -> Unit = {},
-    onTaskClick: (Int) -> Unit = {}
+    onTaskClick: (Int) -> Unit = {},
+    onNavigateToPending: () -> Unit = {}
 ) {
     val tasksFlow by viewModel.filteredTasks.collectAsState()
+    val allTasks by viewModel.allTasks.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val sortOption by viewModel.sortOption.collectAsState()
     val carryForwardEvent by viewModel.carryForwardEvent.collectAsState()
+    val pendingCount by viewModel.pendingTasksByPriority.collectAsState()
 
     var showSortSheet by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
@@ -75,6 +85,21 @@ fun HomeScreen(
                     )
                 },
                 actions = {
+                    BadgedBox(
+                        badge = {
+                            if (pendingCount.isNotEmpty()) {
+                                Badge { Text(pendingCount.size.toString()) }
+                            }
+                        }
+                    ) {
+                        IconButton(onClick = onNavigateToPending) {
+                            Icon(
+                                imageVector = Icons.Outlined.PendingActions,
+                                contentDescription = "View pending tasks",
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
                     IconButton(onClick = { showSortSheet = true }) {
                         Icon(
                             imageVector = Icons.Default.Menu,
@@ -106,7 +131,8 @@ fun HomeScreen(
             WeeklyStrip(
                 days = days,
                 selectedDate = selectedDate,
-                onDateSelected = { viewModel.setSelectedDate(it) }
+                onDateSelected = { viewModel.setSelectedDate(it) },
+                allTasks = allTasks
             )
 
             DailyProgressView(tasks = tasksFlow)
@@ -247,11 +273,22 @@ fun DailyProgressView(tasks: List<Task>) {
 fun WeeklyStrip(
     days: List<LocalDate>,
     selectedDate: String,
-    onDateSelected: (String) -> Unit
+    onDateSelected: (String) -> Unit,
+    allTasks: List<Task> = emptyList()
 ) {
     val today = remember { LocalDate.now() }
     val todayIndex = remember(days) {
         days.indexOfFirst { it.isEqual(today) }.coerceAtLeast(0)
+    }
+
+    val taskStatusByDate = remember(allTasks) {
+        allTasks.groupBy { it.date }.mapValues { (_, tasks) ->
+            when {
+                tasks.all { it.status == TaskStatus.COMPLETED.name } -> DotColorAllDone
+                tasks.any { it.status == TaskStatus.COMPLETED.name } -> DotColorPartial
+                else -> DotColorNoneDone
+            }
+        }
     }
 
     val listState = rememberLazyListState(
@@ -269,6 +306,7 @@ fun WeeklyStrip(
         items(days) { date ->
             val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
             val isSelected = dateString == selectedDate
+            val dotColor = taskStatusByDate[dateString]
 
             Column(
                 modifier = Modifier
@@ -302,6 +340,19 @@ fun WeeklyStrip(
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(modifier = Modifier.size(6.dp)) {
+                    if (dotColor != null) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSelected) Color.White.copy(alpha = 0.85f) else dotColor
+                                )
+                        )
+                    }
+                }
             }
         }
     }

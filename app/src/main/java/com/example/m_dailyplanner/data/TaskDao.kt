@@ -9,6 +9,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks ORDER BY date ASC, position ASC, time ASC")
     fun getAllTasks(): Flow<List<Task>>
 
+    @Query("SELECT * FROM tasks")
+    suspend fun getAllTasksList(): List<Task>
+
     @Query("SELECT * FROM tasks WHERE date = :date ORDER BY position ASC, time ASC")
     fun getTasksForDate(date: String): Flow<List<Task>>
 
@@ -20,6 +23,9 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE date = :date AND status = 'PENDING'")
     suspend fun getPendingTasksForDate(date: String): List<Task>
+
+    @Query("SELECT * FROM tasks WHERE reminderEnabled = 1 AND time != '' AND (date > :today OR (date = :today AND time >= :currentTime))")
+    suspend fun getUpcomingReminders(today: String, currentTime: String): List<Task>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: Task): Long
