@@ -57,15 +57,16 @@ class TaskViewModel(
         allTasks, _selectedDate, _sortOption
     ) { tasks, date, sort ->
         val filtered = tasks.filter { it.date == date }
-        
-        when (sort) {
-            SortOption.PRIORITY -> filtered.sortedBy { 
+        val sorted = when (sort) {
+            SortOption.PRIORITY -> filtered.sortedBy {
                 try { TaskPriority.valueOf(it.priority.uppercase()).ordinal } catch (e: Exception) { 1 }
             }
             SortOption.TIME -> filtered.sortedBy { it.time.ifEmpty { "23:59" } }
             SortOption.CREATION_DATE -> filtered.sortedByDescending { it.createdAt }
             SortOption.MANUAL -> filtered.sortedBy { it.position }
         }
+        // Stable sort: completed tasks sink to bottom, relative order within each group preserved
+        sorted.sortedBy { if (it.status == TaskStatus.COMPLETED.name) 1 else 0 }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

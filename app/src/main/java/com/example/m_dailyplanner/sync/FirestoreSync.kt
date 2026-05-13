@@ -84,6 +84,23 @@ class FirestoreSync {
         return col("notes").get().await().documents.mapNotNull { it.data?.toNote() }
     }
 
+    // ── Note Categories ───────────────────────────────────────────────────────
+
+    suspend fun upsertNoteCategory(category: NoteCategory) {
+        if (!isAvailable) return
+        col("note_categories").document(category.id.toString()).set(category.toMap()).await()
+    }
+
+    suspend fun deleteNoteCategory(categoryId: Int) {
+        if (!isAvailable) return
+        col("note_categories").document(categoryId.toString()).delete().await()
+    }
+
+    suspend fun fetchAllNoteCategories(): List<NoteCategory> {
+        if (!isAvailable) return emptyList()
+        return col("note_categories").get().await().documents.mapNotNull { it.data?.toNoteCategory() }
+    }
+
     // ── Serialization ─────────────────────────────────────────────────────────
 
     private fun Task.toMap() = mapOf(
@@ -152,6 +169,7 @@ class FirestoreSync {
         "id" to id,
         "title" to title,
         "content" to content,
+        "categoryId" to categoryId,
         "createdAt" to createdAt,
         "updatedAt" to updatedAt
     )
@@ -160,7 +178,22 @@ class FirestoreSync {
         id = (get("id") as? Long)?.toInt() ?: 0,
         title = get("title") as? String ?: "",
         content = get("content") as? String ?: "",
+        categoryId = (get("categoryId") as? Long)?.toInt() ?: DEFAULT_CATEGORY_ID,
         createdAt = get("createdAt") as? Long ?: System.currentTimeMillis(),
         updatedAt = get("updatedAt") as? Long ?: System.currentTimeMillis()
+    )
+
+    private fun NoteCategory.toMap() = mapOf(
+        "id" to id,
+        "name" to name,
+        "color" to color,
+        "createdAt" to createdAt
+    )
+
+    private fun Map<String, Any?>.toNoteCategory() = NoteCategory(
+        id = (get("id") as? Long)?.toInt() ?: 0,
+        name = get("name") as? String ?: "",
+        color = get("color") as? String ?: DEFAULT_CATEGORY_COLOR,
+        createdAt = get("createdAt") as? Long ?: System.currentTimeMillis()
     )
 }

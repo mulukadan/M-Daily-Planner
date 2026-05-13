@@ -6,13 +6,13 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TaskDao {
 
-    @Query("SELECT * FROM tasks ORDER BY date ASC, position ASC, time ASC")
+    @Query("SELECT * FROM tasks ORDER BY date ASC, CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END ASC, position ASC, time ASC")
     fun getAllTasks(): Flow<List<Task>>
 
     @Query("SELECT * FROM tasks")
     suspend fun getAllTasksList(): List<Task>
 
-    @Query("SELECT * FROM tasks WHERE date = :date ORDER BY position ASC, time ASC")
+    @Query("SELECT * FROM tasks WHERE date = :date ORDER BY CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END ASC, position ASC, time ASC")
     fun getTasksForDate(date: String): Flow<List<Task>>
 
     @Query("SELECT * FROM tasks WHERE id = :id")

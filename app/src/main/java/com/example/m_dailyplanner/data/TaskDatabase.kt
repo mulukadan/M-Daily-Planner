@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Task::class, Project::class, ProjectTask::class, Note::class],
-    version = 5,
+    entities = [Task::class, Project::class, ProjectTask::class, Note::class, NoteCategory::class],
+    version = 6,
     exportSchema = false
 )
 abstract class TaskDatabase : RoomDatabase() {
@@ -18,6 +18,7 @@ abstract class TaskDatabase : RoomDatabase() {
     abstract fun projectDao(): ProjectDao
     abstract fun projectTaskDao(): ProjectTaskDao
     abstract fun noteDao(): NoteDao
+    abstract fun noteCategoryDao(): NoteCategoryDao
 
     companion object {
         @Volatile
@@ -71,6 +72,21 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
 
+        // v5 → v6: added note_categories table and categoryId column to notes
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `note_categories` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `color` TEXT NOT NULL DEFAULT '#6750A4', `createdAt` INTEGER NOT NULL)"
+                )
+                database.execSQL(
+                    "INSERT INTO `note_categories` (`id`, `name`, `color`, `createdAt`) VALUES (1, 'General', '#6750A4', 1716000000000)"
+                )
+                database.execSQL(
+                    "ALTER TABLE `notes` ADD COLUMN `categoryId` INTEGER NOT NULL DEFAULT 1"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TaskDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -78,7 +94,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     "mdailyplanner_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                 INSTANCE = instance
                 instance

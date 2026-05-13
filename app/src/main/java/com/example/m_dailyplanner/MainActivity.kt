@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                 val projectRepository = remember {
                     ProjectRepository(database.projectDao(), database.projectTaskDao(), firestoreSync)
                 }
-                val noteRepository = remember { NoteRepository(database.noteDao(), firestoreSync) }
+                val noteRepository = remember { NoteRepository(database.noteDao(), database.noteCategoryDao(), firestoreSync) }
                 val dataStoreManager = remember { DataStoreManager(applicationContext) }
 
                 val authViewModel: AuthViewModel = viewModel(
@@ -224,16 +224,21 @@ private fun MainApp(
                 NotesScreen(
                     viewModel = noteViewModel,
                     onNoteClick = { noteId -> navController.navigate("note_detail/$noteId") },
-                    onNewNote = { navController.navigate("note_detail/0") }
+                    onNewNote = { categoryId -> navController.navigate("note_detail/0?categoryId=$categoryId") }
                 )
             }
             composable(
-                "note_detail/{noteId}",
-                arguments = listOf(navArgument("noteId") { type = NavType.IntType })
+                "note_detail/{noteId}?categoryId={categoryId}",
+                arguments = listOf(
+                    navArgument("noteId") { type = NavType.IntType },
+                    navArgument("categoryId") { type = NavType.IntType; defaultValue = DEFAULT_CATEGORY_ID }
+                )
             ) { backStackEntry ->
                 val noteId = backStackEntry.arguments?.getInt("noteId") ?: 0
+                val categoryId = backStackEntry.arguments?.getInt("categoryId") ?: DEFAULT_CATEGORY_ID
                 NoteDetailScreen(
                     noteId = noteId,
+                    defaultCategoryId = categoryId,
                     viewModel = noteViewModel,
                     onBack = { navController.popBackStack() }
                 )
