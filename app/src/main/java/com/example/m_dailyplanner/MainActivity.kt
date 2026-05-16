@@ -8,25 +8,34 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
-import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import com.example.m_dailyplanner.BuildConfig
 import com.example.m_dailyplanner.auth.AuthManager
 import com.example.m_dailyplanner.auth.AuthViewModel
 import com.example.m_dailyplanner.auth.AuthViewModelFactory
@@ -35,6 +44,8 @@ import com.example.m_dailyplanner.sync.FirestoreSync
 import com.example.m_dailyplanner.ui.*
 import com.example.m_dailyplanner.ui.theme.MDailyPlannerTheme
 import com.example.m_dailyplanner.viewmodel.*
+import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.launch
 
 private data class BottomNavItem(
     val route: String,
@@ -94,6 +105,9 @@ class MainActivity : ComponentActivity() {
                     showOnboarding -> {
                         OnboardingScreen(onFinished = { taskViewModel.completeOnboarding() })
                     }
+                    currentUser == null -> {
+                        LoginScreen(authViewModel = authViewModel)
+                    }
                     else -> {
                         MainApp(
                             taskViewModel = taskViewModel,
@@ -109,6 +123,113 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+private fun AppDrawer(currentUser: FirebaseUser?, onClose: () -> Unit, onSignOut: () -> Unit = {}) {
+    val displayName = currentUser?.displayName?.takeIf { it.isNotBlank() }
+    val email = currentUser?.email?.takeIf { it.isNotBlank() }
+    val initial = when {
+        displayName != null -> displayName.first().uppercaseChar().toString()
+        email != null -> email.first().uppercaseChar().toString()
+        else -> "G"
+    }
+
+    ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
+        // Header
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.primary)
+                .padding(horizontal = 24.dp, vertical = 32.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = initial,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+                Text(
+                    text = displayName ?: if (currentUser == null) "Guest" else email ?: "User",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                if (email != null) {
+                    Text(
+                        text = email,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+
+        // Version row
+        Spacer(modifier = Modifier.height(20.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "Version ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Sign out
+        HorizontalDivider()
+        NavigationDrawerItem(
+            label = { Text("Sign Out", color = MaterialTheme.colorScheme.error) },
+            icon = {
+                Icon(
+                    Icons.Default.Logout,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            selected = false,
+            onClick = { onSignOut(); onClose() },
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+        )
+
+        // Branding footer
+        HorizontalDivider()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "A product of M-Unit",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+@Composable
 private fun MainApp(
     taskViewModel: TaskViewModel,
     projectViewModel: ProjectViewModel,
@@ -119,7 +240,22 @@ private fun MainApp(
     val currentEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentEntry?.destination?.route
     val topLevelRoutes = setOf("tasks", "projects", "notes")
+    val currentUser by authViewModel.currentUser.collectAsState()
 
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val openDrawer = { scope.launch { drawerState.open() } }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppDrawer(
+                currentUser = currentUser,
+                onClose = { scope.launch { drawerState.close() } },
+                onSignOut = { authViewModel.signOut() }
+            )
+        }
+    ) {
     Scaffold(
         bottomBar = {
             if (currentRoute in topLevelRoutes) {
@@ -161,7 +297,8 @@ private fun MainApp(
                     viewModel = taskViewModel,
                     onDayClick = { date -> navController.navigate("detail/$date") },
                     onTaskClick = { taskId -> navController.navigate("task_detail/$taskId") },
-                    onNavigateToPending = { navController.navigate("pending_tasks") }
+                    onNavigateToPending = { navController.navigate("pending_tasks") },
+                    onOpenDrawer = { openDrawer() }
                 )
             }
             composable("pending_tasks") {
@@ -201,7 +338,8 @@ private fun MainApp(
                     viewModel = projectViewModel,
                     onProjectClick = { projectId ->
                         navController.navigate("project_detail/$projectId")
-                    }
+                    },
+                    onOpenDrawer = { openDrawer() }
                 )
             }
             composable(
@@ -224,7 +362,8 @@ private fun MainApp(
                 NotesScreen(
                     viewModel = noteViewModel,
                     onNoteClick = { noteId -> navController.navigate("note_detail/$noteId") },
-                    onNewNote = { categoryId -> navController.navigate("note_detail/0?categoryId=$categoryId") }
+                    onNewNote = { categoryId -> navController.navigate("note_detail/0?categoryId=$categoryId") },
+                    onOpenDrawer = { openDrawer() }
                 )
             }
             composable(
@@ -245,4 +384,5 @@ private fun MainApp(
             }
         }
     }
+    } // ModalNavigationDrawer
 }

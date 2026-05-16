@@ -24,7 +24,8 @@ import java.util.*
 @Composable
 fun ProjectsScreen(
     viewModel: ProjectViewModel,
-    onProjectClick: (Int) -> Unit
+    onProjectClick: (Int) -> Unit,
+    onOpenDrawer: () -> Unit = {}
 ) {
     val projects by viewModel.projects.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
@@ -38,6 +39,15 @@ fun ProjectsScreen(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimary
                     )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Open menu",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary

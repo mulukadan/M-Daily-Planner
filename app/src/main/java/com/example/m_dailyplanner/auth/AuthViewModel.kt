@@ -71,17 +71,20 @@ class AuthViewModel(
         val projectDao = database.projectDao()
         val projectTaskDao = database.projectTaskDao()
         val noteDao = database.noteDao()
+        val noteCategoryDao = database.noteCategoryDao()
 
         // Push local → Firestore
         taskDao.getAllTasksList().forEach { firestoreSync.upsertTask(it) }
         projectDao.getAllProjectsList().forEach { firestoreSync.upsertProject(it) }
         projectTaskDao.getAllProjectTasksList().forEach { firestoreSync.upsertProjectTask(it) }
+        noteCategoryDao.getAllCategoriesList().forEach { firestoreSync.upsertNoteCategory(it) }
         noteDao.getAllNotesList().forEach { firestoreSync.upsertNote(it) }
 
-        // Pull Firestore → Room (REPLACE handles deduplication by id)
+        // Pull Firestore → Room (categories before notes to satisfy foreign key order)
         firestoreSync.fetchAllProjects().forEach { projectDao.insertProject(it) }
         firestoreSync.fetchAllProjectTasks().forEach { projectTaskDao.insertTask(it) }
         firestoreSync.fetchAllTasks().forEach { taskDao.insertTask(it) }
+        firestoreSync.fetchAllNoteCategories().forEach { noteCategoryDao.insertCategory(it) }
         firestoreSync.fetchAllNotes().forEach { noteDao.insertNote(it) }
     }
 }

@@ -38,7 +38,8 @@ private fun parseColor(hex: String): Color = try {
 fun NotesScreen(
     viewModel: NoteViewModel,
     onNoteClick: (Int) -> Unit,
-    onNewNote: (categoryId: Int) -> Unit
+    onNewNote: (categoryId: Int) -> Unit,
+    onOpenDrawer: () -> Unit = {}
 ) {
     val notes by viewModel.notes.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -109,6 +110,15 @@ fun NotesScreen(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimary
                     )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Open menu",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary

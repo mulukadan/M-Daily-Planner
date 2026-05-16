@@ -38,7 +38,8 @@ fun HomeScreen(
     viewModel: TaskViewModel,
     onDayClick: (String) -> Unit = {},
     onTaskClick: (Int) -> Unit = {},
-    onNavigateToPending: () -> Unit = {}
+    onNavigateToPending: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     val tasksFlow by viewModel.filteredTasks.collectAsState()
     val allTasks by viewModel.allTasks.collectAsState()
@@ -84,6 +85,15 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                 },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Open menu",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                },
                 actions = {
                     BadgedBox(
                         badge = {
@@ -102,7 +112,7 @@ fun HomeScreen(
                     }
                     IconButton(onClick = { showSortSheet = true }) {
                         Icon(
-                            imageVector = Icons.Default.Menu,
+                            imageVector = Icons.Default.Sort,
                             contentDescription = "Sort",
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
@@ -167,18 +177,6 @@ fun HomeScreen(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "A product of M-Unit",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            }
         }
 
         if (showSortSheet) {

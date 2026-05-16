@@ -11,6 +11,9 @@ interface NoteCategoryDao {
     @Query("SELECT * FROM note_categories ORDER BY createdAt ASC")
     fun getAllCategories(): Flow<List<NoteCategory>>
 
+    @Query("SELECT * FROM note_categories ORDER BY createdAt ASC")
+    suspend fun getAllCategoriesList(): List<NoteCategory>
+
     @Query("SELECT * FROM note_categories WHERE id = :id")
     suspend fun getCategoryById(id: Int): NoteCategory?
 
