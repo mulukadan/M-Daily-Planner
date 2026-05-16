@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
 
                 val currentUser by authViewModel.currentUser.collectAsState()
                 val showOnboarding by taskViewModel.showOnboarding.collectAsState()
+                var showSplash by remember { mutableStateOf(true) }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     val launcher = rememberLauncherForActivityResult(
@@ -102,6 +103,9 @@ class MainActivity : ComponentActivity() {
                 }
 
                 when {
+                    showSplash -> {
+                        SplashScreen(onFinished = { showSplash = false })
+                    }
                     showOnboarding -> {
                         OnboardingScreen(onFinished = { taskViewModel.completeOnboarding() })
                     }
