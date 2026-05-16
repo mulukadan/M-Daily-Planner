@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,17 +9,15 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val localProps = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) {
+    FileInputStream(localPropsFile).use { localProps.load(it) }
+}
+
 android {
     namespace = "com.example.m_dailyplanner"
     compileSdk = 35
-
-    val localProps = java.util.Properties()
-    val localPropsFile = rootProject.file("local.properties")
-    if (localPropsFile.exists()) {
-        val fis = java.io.FileInputStream(localPropsFile)
-        localProps.load(fis)
-        fis.close()
-    }
 
     defaultConfig {
         applicationId = "com.example.m_dailyplanner"
@@ -78,7 +79,7 @@ dependencies {
     implementation(libs.googleid)
 
     ksp(libs.androidx.room.compiler)
-    
+
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
