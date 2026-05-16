@@ -10,6 +10,14 @@ android {
     namespace = "com.example.m_dailyplanner"
     compileSdk = 35
 
+    val localProps = java.util.Properties()
+    val localPropsFile = rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        val fis = java.io.FileInputStream(localPropsFile)
+        localProps.load(fis)
+        fis.close()
+    }
+
     defaultConfig {
         applicationId = "com.example.m_dailyplanner"
         minSdk = 29
@@ -18,6 +26,8 @@ android {
         versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "CLAUDE_API_KEY", "\"${localProps.getProperty("CLAUDE_API_KEY", "")}\"")
     }
 
     buildTypes {

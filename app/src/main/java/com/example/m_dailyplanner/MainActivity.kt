@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.*
@@ -55,9 +57,10 @@ private data class BottomNavItem(
 )
 
 private val bottomNavItems = listOf(
-    BottomNavItem("tasks", "Tasks", Icons.Filled.Assignment, Icons.Outlined.Assignment),
-    BottomNavItem("projects", "Projects", Icons.Filled.Folder, Icons.Outlined.FolderOpen),
-    BottomNavItem("notes", "Notes", Icons.Filled.Description, Icons.Outlined.Description)
+    BottomNavItem("tasks",    "Tasks",    Icons.Filled.Assignment,  Icons.Outlined.Assignment),
+    BottomNavItem("projects", "Projects", Icons.Filled.Folder,      Icons.Outlined.FolderOpen),
+    BottomNavItem("notes",    "Notes",    Icons.Filled.Description,  Icons.Outlined.Description),
+    BottomNavItem("report",   "Report",   Icons.Filled.BarChart,     Icons.Outlined.BarChart)
 )
 
 class MainActivity : ComponentActivity() {
@@ -90,6 +93,9 @@ class MainActivity : ComponentActivity() {
                 val noteViewModel: NoteViewModel = viewModel(
                     factory = NoteViewModelFactory(application, noteRepository)
                 )
+                val reportViewModel: ReportViewModel = viewModel(
+                    factory = ReportViewModelFactory(application, database)
+                )
 
                 val currentUser by authViewModel.currentUser.collectAsState()
                 val showOnboarding by taskViewModel.showOnboarding.collectAsState()
@@ -117,7 +123,8 @@ class MainActivity : ComponentActivity() {
                             taskViewModel = taskViewModel,
                             projectViewModel = projectViewModel,
                             noteViewModel = noteViewModel,
-                            authViewModel = authViewModel
+                            authViewModel = authViewModel,
+                            reportViewModel = reportViewModel
                         )
                     }
                 }
@@ -238,12 +245,13 @@ private fun MainApp(
     taskViewModel: TaskViewModel,
     projectViewModel: ProjectViewModel,
     noteViewModel: NoteViewModel,
-    authViewModel: AuthViewModel
+    authViewModel: AuthViewModel,
+    reportViewModel: ReportViewModel
 ) {
     val navController = rememberNavController()
     val currentEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentEntry?.destination?.route
-    val topLevelRoutes = setOf("tasks", "projects", "notes")
+    val topLevelRoutes = setOf("tasks", "projects", "notes", "report")
     val currentUser by authViewModel.currentUser.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -358,6 +366,14 @@ private fun MainApp(
                     projectName = projectName,
                     viewModel = projectViewModel,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            // ── Report tab ──
+            composable("report") {
+                ReportScreen(
+                    viewModel = reportViewModel,
+                    onOpenDrawer = { openDrawer() }
                 )
             }
 
