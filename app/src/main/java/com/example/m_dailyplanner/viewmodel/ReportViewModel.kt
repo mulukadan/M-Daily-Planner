@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.m_dailyplanner.BuildConfig
 import com.example.m_dailyplanner.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,10 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -71,7 +66,7 @@ class ReportViewModel(
             _state.value = ReportState.Loading
             runCatching {
                 val stats = collectStats()
-                val report = callClaude(stats)
+                val report = buildReport(stats)
                 _state.value = ReportState.Success(report, stats)
             }.onFailure { e ->
                 _state.value = ReportState.Error(e.message ?: "Something went wrong")
@@ -107,7 +102,6 @@ class ReportViewModel(
         fun inRange(t: Task, from: LocalDate) =
             runCatching { LocalDate.parse(t.date) >= from }.getOrDefault(false)
 
-        // Streaks (based on dates that have at least one completed task)
         val completedDates = completed
             .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
             .toSortedSet()
@@ -123,7 +117,6 @@ class ReportViewModel(
             longestStreak = maxOf(longestStreak, run)
         }
 
-        // Day-of-week productivity
         val byDay = completed.groupBy {
             runCatching { LocalDate.parse(it.date).dayOfWeek }.getOrNull()
         }.filterKeys { it != null }
@@ -171,109 +164,167 @@ class ReportViewModel(
         )
     }
 
-    // ── Claude API ────────────────────────────────────────────────────────────
+    // ── Local report builder ──────────────────────────────────────────────────
 
-    private suspend fun callClaude(stats: AppStats): String = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.CLAUDE_API_KEY
-        if (apiKey.isBlank())
-            throw Exception("Add CLAUDE_API_KEY=sk-ant-... to local.properties and rebuild.")
+    private suspend fun buildReport(s: AppStats): String = withContext(Dispatchers.Default) {
+        val completionPct = (s.completionRate * 100).toInt()
 
-        val conn = (URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("x-api-key", apiKey)
-            setRequestProperty("anthropic-version", "2023-06-01")
-            connectTimeout = 30_000
-            readTimeout    = 60_000
-            doOutput = true
+        // Score (1–10)
+        var score = 5.0
+        when {
+            completionPct >= 80 -> score += 2.0
+            completionPct >= 60 -> score += 1.0
+            completionPct < 40  -> score -= 1.0
+        }
+        when {
+            s.currentStreak >= 7 -> score += 1.5
+            s.currentStreak >= 3 -> score += 0.5
+        }
+        when {
+            s.overdueTasks > 10 -> score -= 2.0
+            s.overdueTasks > 5  -> score -= 1.0
+            s.overdueTasks > 0  -> score -= 0.5
+        }
+        if (s.last7Completed > 0) score += 0.5
+        if (s.highTotal > 0 && s.highCompleted.toFloat() / s.highTotal >= 0.7f) score += 0.5
+        val finalScore = score.coerceIn(1.0, 10.0).toInt()
+
+        val scoreExplanation = when {
+            finalScore >= 9 -> "Outstanding consistency and execution — you're operating at peak productivity."
+            finalScore >= 7 -> "Strong productivity habits with room to push even further."
+            finalScore >= 5 -> "Solid foundation — a few habit tweaks will unlock your next level."
+            finalScore >= 3 -> "Building momentum; consistency is the key to breaking through."
+            else            -> "Every completed task is progress — small daily wins compound fast."
         }
 
-        val body = JSONObject().apply {
-            put("model", "claude-haiku-4-5-20251001")
-            put("max_tokens", 1500)
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "user")
-                    put("content", buildPrompt(stats))
-                })
-            })
-        }.toString()
+        // Behavioral profile (2–3 sentences)
+        val styleBase = when {
+            completionPct >= 80 && s.currentStreak >= 5 ->
+                "You are a disciplined executor — someone who commits and follows through with impressive consistency."
+            completionPct >= 70 ->
+                "You have a results-driven approach to planning, completing most of what you set out to do."
+            completionPct >= 50 ->
+                "You plan ambitiously but face some follow-through challenges, common among high-energy planners."
+            else ->
+                "You're in a building phase, establishing the routines that will drive future productivity."
+        }
+        val dayNote = if (s.mostProductiveDay != "N/A")
+            " Your peak performance lands on ${s.mostProductiveDay}s — your natural power day."
+        else ""
+        val streakNote = when {
+            s.currentStreak >= 7  -> " Your ${s.currentStreak}-day streak shows remarkable daily commitment."
+            s.currentStreak >= 3  -> " You're on a ${s.currentStreak}-day streak — good momentum building."
+            s.longestStreak >= 5  -> " Your best streak of ${s.longestStreak} days proves you're capable of sustained effort."
+            else                  -> " Building a consistent daily habit will be your highest-leverage next step."
+        }
+        val profile = "$styleBase$dayNote$streakNote"
 
-        conn.outputStream.bufferedWriter().use { it.write(body) }
-
-        val code = conn.responseCode
-        val text = (if (code == 200) conn.inputStream else conn.errorStream)
-            ?.bufferedReader()?.readText() ?: ""
-        conn.disconnect()
-
-        if (code != 200) throw Exception("Claude API error $code: $text")
-        JSONObject(text).getJSONArray("content").getJSONObject(0).getString("text")
-    }
-
-    private fun buildPrompt(s: AppStats): String {
-        fun pct(n: Int, d: Int) = if (d == 0) "0%" else "${n * 100 / d}%"
-        val projects = if (s.projectSummaries.isEmpty()) "  No projects yet."
-        else s.projectSummaries.joinToString("\n") {
-            "  • ${it.name}: ${it.completed}/${it.total} done (${pct(it.completed, it.total)})"
+        // Strengths (up to 3)
+        val strengths = mutableListOf<String>()
+        if (completionPct >= 70)
+            strengths += "Completion rate of $completionPct% — you finish what you start."
+        else if (s.completedTasks > 0)
+            strengths += "${s.completedTasks} tasks completed — every done item builds momentum."
+        if (s.currentStreak >= 3)
+            strengths += "${s.currentStreak}-day active streak shows real daily dedication."
+        else if (s.longestStreak >= 5)
+            strengths += "Personal best streak of ${s.longestStreak} days proves your consistency potential."
+        if (s.highTotal > 0 && s.highCompleted.toFloat() / s.highTotal >= 0.6f)
+            strengths += "${s.highCompleted * 100 / s.highTotal}% of high-priority tasks done — solid prioritization."
+        if (s.totalProjects > 0)
+            strengths += "Managing ${s.totalProjects} project${if (s.totalProjects > 1) "s" else ""} shows you think in goals, not just tasks."
+        if (s.totalNotes >= 5)
+            strengths += "${s.totalNotes} notes across ${s.noteCategories} categories — you're a reflective thinker."
+        if (s.last7Completed >= 5)
+            strengths += "${s.last7Completed} tasks completed this week — you're in a productive flow."
+        val topStrengths = strengths.take(3).ifEmpty {
+            listOf(
+                "You've started tracking your work — awareness is the first step.",
+                "Using tasks, projects, and notes together gives you a complete system.",
+                "${s.tasksWithReminders} tasks with reminders set shows planning intent."
+            )
         }
 
-        return """
-You are an expert productivity coach and behavioral analyst. Analyze this user's task management data and generate a warm, insightful productivity report.
+        // Areas to improve (up to 3)
+        val improvements = mutableListOf<String>()
+        if (s.overdueTasks > 0)
+            improvements += "${s.overdueTasks} overdue task${if (s.overdueTasks > 1) "s" else ""} — clearing these reduces mental clutter fast."
+        if (completionPct < 60)
+            improvements += "$completionPct% completion suggests over-planning. Commit to fewer, focused tasks each day."
+        if (s.currentStreak == 0)
+            improvements += "No active streak — even one small task per day restarts the habit loop quickly."
+        else if (s.longestStreak > 4 && s.currentStreak < s.longestStreak / 2)
+            improvements += "Current streak (${s.currentStreak}d) is well below your best (${s.longestStreak}d) — you know you can go longer."
+        if (s.pendingTasks > 3 && s.tasksWithReminders < s.pendingTasks / 2)
+            improvements += "Most pending tasks lack reminders — time-based nudges dramatically improve follow-through."
+        if (s.last7Created > 0 && s.last7Completed == 0)
+            improvements += "${s.last7Created} tasks created this week, zero completed — shift focus from planning to execution."
+        if (s.highTotal > 0 && s.highCompleted.toFloat() / s.highTotal < 0.5f)
+            improvements += "Under half your high-priority tasks are done — tackle these first thing each day."
+        val topImprovements = improvements.take(3).ifEmpty {
+            listOf(
+                "Keep pushing your completion rate higher.",
+                "Review your task list weekly to clear stale items.",
+                "Set reminders on time-sensitive tasks to avoid overdue slippage."
+            )
+        }
 
-=== USER DATA ===
+        // Recommendations (up to 4)
+        val recs = mutableListOf<String>()
+        if (s.overdueTasks > 0)
+            recs += "Spend 15 minutes now to reschedule or close your ${s.overdueTasks} overdue task${if (s.overdueTasks > 1) "s" else ""}."
+        if (s.mostProductiveDay != "N/A")
+            recs += "Schedule your hardest tasks on ${s.mostProductiveDay}s — your data confirms that's your peak day."
+        if (s.tasksWithReminders < 3)
+            recs += "Add reminder times to upcoming tasks — a single daily alarm anchors your planning habit."
+        if (completionPct < 70)
+            recs += "Cap yourself at 3–5 tasks per day. Fewer commitments, fully honored, beat long lists half-done."
+        if (s.totalNotes < 3)
+            recs += "Start a weekly reflection note — 5 minutes reviewing wins and slip-ups compounds over time."
+        if (s.totalProjects == 0 && s.totalTasks > 10)
+            recs += "Group related tasks into projects — progress becomes visible at a glance."
+        if (s.leastProductiveDay != "N/A")
+            recs += "Protect ${s.leastProductiveDay}s for lighter work or rest — don't fight your own patterns."
+        val topRecs = recs.take(4).ifEmpty {
+            listOf(
+                "Keep your task list reviewed and up to date every morning.",
+                "Use projects to group related tasks for better progress visibility.",
+                "Add reminders to every task with a real deadline.",
+                "Celebrate completed streaks — positive reinforcement sustains habits."
+            )
+        }
 
-TASKS (All Time):
-Total: ${s.totalTasks} | Completed: ${s.completedTasks} (${pct(s.completedTasks, s.totalTasks)}) | In Progress: ${s.inProgressTasks} | Pending: ${s.pendingTasks} | Overdue: ${s.overdueTasks}
+        // Weekly challenge
+        val challenge = when {
+            s.overdueTasks >= 5  -> "Clear all ${s.overdueTasks} overdue tasks before adding new ones — enter next week with a clean slate."
+            s.currentStreak == 0 -> "Complete at least one task every single day for the next 7 days to rebuild your daily habit."
+            completionPct < 50   -> "Complete 80%+ of every task you schedule this week — if you doubt you'll finish it, don't add it."
+            s.last7Completed < 3 -> "Close at least ${(s.last7Completed + 3).coerceAtLeast(5)} tasks over the next 7 days — one per day minimum."
+            s.tasksWithReminders == 0 -> "Add a reminder to every task you create this week and honor every notification that fires."
+            s.totalNotes < 3     -> "Write at least 3 notes this week — one per topic area to capture your thinking."
+            else                 -> "Extend your current ${s.currentStreak}-day streak to ${s.currentStreak + 7} days without missing a single day."
+        }
 
-PRIORITY BREAKDOWN:
-High:   ${s.highTotal} tasks, ${s.highCompleted} done (${pct(s.highCompleted, s.highTotal)})
-Medium: ${s.mediumTotal} tasks, ${s.mediumCompleted} done (${pct(s.mediumCompleted, s.mediumTotal)})
-Low:    ${s.lowTotal} tasks, ${s.lowCompleted} done (${pct(s.lowCompleted, s.lowTotal)})
-
-RECENT ACTIVITY:
-Last  7 days: ${s.last7Created} created, ${s.last7Completed} completed
-Last 30 days: ${s.last30Created} created, ${s.last30Completed} completed
-
-HABITS & PATTERNS:
-Current streak: ${s.currentStreak} days | Best streak: ${s.longestStreak} days
-Most productive day: ${s.mostProductiveDay} | Least productive: ${s.leastProductiveDay}
-Avg tasks per active day: ${"%.1f".format(s.avgTasksPerActiveDay)} | With reminders: ${s.tasksWithReminders}
-
-PROJECTS (${s.totalProjects}):
-$projects
-
-NOTES: ${s.totalNotes} total | ${s.notesLast7Days} this week | ${s.noteCategories} categories
-
-=== REQUIRED FORMAT ===
-Use exactly these section headings:
-
-PRODUCTIVITY SCORE: [X]/10
-[One sentence explanation of the score]
-
-BEHAVIORAL PROFILE
-[2–3 sentences describing their productivity personality based on the patterns]
-
-STRENGTHS
-• [Strength with specific data reference]
-• [Strength with specific data reference]
-• [Strength with specific data reference]
-
-AREAS TO IMPROVE
-• [Constructive point with data]
-• [Constructive point with data]
-• [Constructive point with data]
-
-RECOMMENDATIONS
-• [Specific, actionable recommendation]
-• [Specific, actionable recommendation]
-• [Specific, actionable recommendation]
-• [Specific, actionable recommendation]
-
-WEEKLY CHALLENGE
-[One concrete, measurable challenge for the next 7 days]
-
-Be warm, specific, and reference actual numbers from the data.
-        """.trimIndent()
+        // Assemble
+        buildString {
+            appendLine("PRODUCTIVITY SCORE: $finalScore/10")
+            appendLine(scoreExplanation)
+            appendLine()
+            appendLine("BEHAVIORAL PROFILE")
+            appendLine(profile)
+            appendLine()
+            appendLine("STRENGTHS")
+            topStrengths.forEach { appendLine("• $it") }
+            appendLine()
+            appendLine("AREAS TO IMPROVE")
+            topImprovements.forEach { appendLine("• $it") }
+            appendLine()
+            appendLine("RECOMMENDATIONS")
+            topRecs.forEach { appendLine("• $it") }
+            appendLine()
+            appendLine("WEEKLY CHALLENGE")
+            append(challenge)
+        }.trim()
     }
 }
 

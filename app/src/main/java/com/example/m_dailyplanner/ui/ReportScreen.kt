@@ -132,9 +132,9 @@ private fun IdleContent(onGenerate: () -> Unit) {
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("AI Productivity Analysis", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Productivity Analysis", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                "Analyze your tasks, habits, and patterns.\nGet personalized insights powered by Claude AI.",
+                "Analyze your tasks, habits, and patterns.\nGet personalized insights based on your real data.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -150,12 +150,6 @@ private fun IdleContent(onGenerate: () -> Unit) {
             Spacer(Modifier.width(10.dp))
             Text("Generate Report", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
-
-        Text(
-            "Powered by Claude AI",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-        )
     }
 }
 
@@ -321,7 +315,7 @@ private fun AiReportCard(report: String) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Text("AI Analysis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Your Analysis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
