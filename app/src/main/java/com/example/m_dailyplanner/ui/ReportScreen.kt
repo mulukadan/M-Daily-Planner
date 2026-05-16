@@ -213,7 +213,7 @@ private fun StatsOverview(stats: AppStats) {
             )
             StatCard(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Default.LocalFire,
+                icon = Icons.Default.Whatshot,
                 iconColor = Color(0xFFE65100),
                 label = "Streak",
                 value = "${stats.currentStreak}d"
