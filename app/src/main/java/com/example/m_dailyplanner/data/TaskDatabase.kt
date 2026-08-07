@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Task::class, Project::class, ProjectTask::class, Note::class, NoteCategory::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class TaskDatabase : RoomDatabase() {
@@ -87,6 +87,23 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
 
+        // v6 → v7: added color and position columns for project cards
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE `projects` ADD COLUMN `color` TEXT NOT NULL DEFAULT '#6750A4'")
+                database.execSQL("ALTER TABLE `projects` ADD COLUMN `position` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        private val SEED_CALLBACK = object : RoomDatabase.Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                super.onCreate(db)
+                db.execSQL(
+                    "INSERT INTO `note_categories` (`id`, `name`, `color`, `createdAt`) VALUES (1, 'General', '#6750A4', ${System.currentTimeMillis()})"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TaskDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -94,7 +111,8 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     "mdailyplanner_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addCallback(SEED_CALLBACK)
                     .build()
                 INSTANCE = instance
                 instance

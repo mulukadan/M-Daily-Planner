@@ -358,6 +358,7 @@ fun NoteDetailScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text(if (isNew) "New Note" else "Note", fontWeight = FontWeight.Bold) },
@@ -382,10 +383,15 @@ fun NoteDetailScreen(
             )
         }
     ) { padding ->
+        // navigationBarsPadding + imePadding compose correctly: when the IME is shown,
+        // imePadding absorbs the nav bar inset and adds the full keyboard height so the
+        // toolbar ends up flush with the keyboard top with no extra gap.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
+                .navigationBarsPadding()
+                .imePadding()
         ) {
             // Title
             TextField(
@@ -458,12 +464,7 @@ fun NoteDetailScreen(
                 color = MaterialTheme.colorScheme.outlineVariant
             )
 
-            // Formatting toolbar — pinned above content, always visible above keyboard
-            FormattingToolbar(value = content, onValueChange = { content = it })
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-            // Content — takes remaining space, scrollable within that space
+            // Content — expands to fill all space between divider and toolbar
             TextField(
                 value = content,
                 onValueChange = { content = mergeSpans(content, it) },
@@ -483,6 +484,10 @@ fun NoteDetailScreen(
                     unfocusedIndicatorColor = Color.Transparent
                 )
             )
+
+            // Toolbar — always the last item in the column, flush with keyboard top
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            FormattingToolbar(value = content, onValueChange = { content = it })
         }
     }
 }

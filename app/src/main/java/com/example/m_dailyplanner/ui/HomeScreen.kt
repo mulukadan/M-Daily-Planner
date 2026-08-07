@@ -50,6 +50,7 @@ fun HomeScreen(
 
     var showSortSheet by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
+    var isCarryingForward by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     val today = remember { LocalDate.now() }
@@ -57,19 +58,35 @@ fun HomeScreen(
 
     if (carryForwardEvent != null) {
         AlertDialog(
-            onDismissRequest = { viewModel.dismissCarryForward() },
+            onDismissRequest = { if (!isCarryingForward) viewModel.dismissCarryForward() },
             title = { Text("Unfinished Tasks") },
             text = {
                 Text("You have ${carryForwardEvent!!.count} unfinished tasks from yesterday. Carry them forward to today?")
             },
             confirmButton = {
-                TextButton(onClick = { viewModel.carryForwardTasks(carryForwardEvent!!.date) }) {
-                    Text("Yes")
+                if (isCarryingForward) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                } else {
+                    TextButton(onClick = {
+                        isCarryingForward = true
+                        viewModel.carryForwardTasks(carryForwardEvent!!.date)
+                    }) {
+                        Text("Yes")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissCarryForward() }) {
-                    Text("No")
+                if (!isCarryingForward) {
+                    TextButton(onClick = { viewModel.dismissCarryForward() }) {
+                        Text("No")
+                    }
                 }
             }
         )
