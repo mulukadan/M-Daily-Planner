@@ -13,6 +13,8 @@ class HabitRepository(private val habitDao: HabitDao) {
 
     suspend fun updateHabit(habit: Habit) = habitDao.updateHabit(habit)
 
+    suspend fun updateHabits(habits: List<Habit>) = habitDao.updateHabits(habits)
+
     suspend fun deleteHabit(habit: Habit) {
         habitDao.deleteLogsForHabit(habit.id)
         habitDao.deleteHabit(habit)

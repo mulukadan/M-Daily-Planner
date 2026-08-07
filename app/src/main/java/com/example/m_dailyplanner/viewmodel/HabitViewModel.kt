@@ -58,6 +58,12 @@ class HabitViewModel(
         viewModelScope.launch { repository.updateHabit(habit) }
     }
 
+    fun updateHabitOrder(habits: List<Habit>) {
+        viewModelScope.launch {
+            repository.updateHabits(habits.mapIndexed { index, habit -> habit.copy(position = index) })
+        }
+    }
+
     fun deleteHabit(habit: Habit) {
         viewModelScope.launch { repository.deleteHabit(habit) }
     }

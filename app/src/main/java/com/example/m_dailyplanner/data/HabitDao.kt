@@ -30,6 +30,11 @@ interface HabitDao {
     @Update
     suspend fun updateHabit(habit: Habit)
 
+    @Transaction
+    suspend fun updateHabits(habits: List<Habit>) {
+        habits.forEach { updateHabit(it) }
+    }
+
     @Delete
     suspend fun deleteHabit(habit: Habit)
 

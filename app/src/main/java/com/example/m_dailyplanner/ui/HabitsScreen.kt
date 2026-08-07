@@ -4,9 +4,12 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,16 +22,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.example.m_dailyplanner.data.CATEGORY_COLORS
 import com.example.m_dailyplanner.data.Habit
 import com.example.m_dailyplanner.ui.theme.extendedColors
 import com.example.m_dailyplanner.viewmodel.HabitViewModel
 import com.example.m_dailyplanner.viewmodel.HabitWithStreak
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,20 +79,14 @@ fun HabitsScreen(
                 modifier = Modifier.padding(padding)
             )
         } else {
-            LazyColumn(
+            ReorderableHabitList(
+                habitsFlow = habits,
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(habits, key = { it.habit.id }) { entry ->
-                    HabitCard(
-                        entry = entry,
-                        onToggleToday = { viewModel.toggleToday(entry.habit.id) },
-                        onEdit = { name, color -> viewModel.updateHabit(entry.habit.copy(name = name, color = color)) },
-                        onDelete = { viewModel.deleteHabit(entry.habit) }
-                    )
-                }
-            }
+                onOrderChanged = { viewModel.updateHabitOrder(it) },
+                onToggleToday = { viewModel.toggleToday(it.habit.id) },
+                onEdit = { entry, name, color -> viewModel.updateHabit(entry.habit.copy(name = name, color = color)) },
+                onDelete = { viewModel.deleteHabit(it.habit) }
+            )
         }
     }
 
@@ -101,11 +103,121 @@ fun HabitsScreen(
 }
 
 @Composable
+private fun ReorderableHabitList(
+    habitsFlow: List<HabitWithStreak>,
+    modifier: Modifier = Modifier,
+    onOrderChanged: (List<Habit>) -> Unit,
+    onToggleToday: (HabitWithStreak) -> Unit,
+    onEdit: (HabitWithStreak, String, String) -> Unit,
+    onDelete: (HabitWithStreak) -> Unit
+) {
+    val habits = remember { mutableStateListOf<HabitWithStreak>() }
+    var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+    val edgeScrollPx = with(density) { 56.dp.toPx() }
+
+    LaunchedEffect(habitsFlow) {
+        if (draggedItemIndex == null) {
+            habits.clear()
+            habits.addAll(habitsFlow)
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier
+            .pointerInput(Unit) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        listState.layoutInfo.visibleItemsInfo
+                            .find { item ->
+                                offset.y.toInt() in item.offset..(item.offset + item.size)
+                            }
+                            ?.let {
+                                draggedItemIndex = it.index
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffset += dragAmount.y
+
+                        draggedItemIndex?.let { currentIndex ->
+                            val targetIndex = listState.layoutInfo.visibleItemsInfo
+                                .find { item ->
+                                    change.position.y.toInt() in item.offset..(item.offset + item.size)
+                                }
+                                ?.index
+
+                            if (targetIndex != null && targetIndex != currentIndex && targetIndex < habits.size) {
+                                habits.add(targetIndex, habits.removeAt(currentIndex))
+                                draggedItemIndex = targetIndex
+                                dragOffset = 0f
+                            }
+                        }
+
+                        // Auto-scroll the list when dragging near the top/bottom edge, so a habit
+                        // can be reordered into a position that's currently off-screen.
+                        val viewportHeight = listState.layoutInfo.viewportSize.height
+                        val y = change.position.y
+                        when {
+                            y < edgeScrollPx -> coroutineScope.launch { listState.scrollBy(-24f) }
+                            y > viewportHeight - edgeScrollPx ->
+                                coroutineScope.launch { listState.scrollBy(24f) }
+                        }
+                    },
+                    onDragEnd = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onOrderChanged(habits.map { it.habit })
+                        draggedItemIndex = null
+                        dragOffset = 0f
+                    },
+                    onDragCancel = {
+                        draggedItemIndex = null
+                        dragOffset = 0f
+                    }
+                )
+            },
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        itemsIndexed(habits, key = { _, entry -> entry.habit.id }) { index, entry ->
+            val isDragging = index == draggedItemIndex
+            val scale by animateFloatAsState(if (isDragging) 1.05f else 1f, label = "habitDragScale")
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        translationY = if (isDragging) dragOffset else 0f
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .zIndex(if (isDragging) 1f else 0f)
+            ) {
+                HabitCard(
+                    entry = entry,
+                    onToggleToday = { onToggleToday(entry) },
+                    onEdit = { name, color -> onEdit(entry, name, color) },
+                    onDelete = { onDelete(entry) },
+                    showDragHandle = true
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun HabitCard(
     entry: HabitWithStreak,
     onToggleToday: () -> Unit,
     onEdit: (name: String, color: String) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    showDragHandle: Boolean = false
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -222,6 +334,17 @@ private fun HabitCard(
                         colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error)
                     )
                 }
+            }
+
+            if (showDragHandle) {
+                Icon(
+                    Icons.Default.DragHandle,
+                    contentDescription = "Drag to reorder",
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
             }
         }
     }
