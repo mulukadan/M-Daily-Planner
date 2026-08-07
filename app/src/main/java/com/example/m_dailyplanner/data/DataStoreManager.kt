@@ -14,6 +14,17 @@ class DataStoreManager(private val context: Context) {
     companion object {
         val CARRY_FORWARD_COUNT = intPreferencesKey("carry_forward_count")
         val SHOW_ONBOARDING = booleanPreferencesKey("show_onboarding")
+        val APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
+    }
+
+    val appLockEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[APP_LOCK_ENABLED] ?: false
+    }
+
+    suspend fun setAppLockEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[APP_LOCK_ENABLED] = enabled
+        }
     }
 
     // Count of ALL pending tasks dated before today (not just yesterday's), so tasks

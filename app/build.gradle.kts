@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.googleid)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
+    implementation(libs.androidx.biometric)
 
     ksp(libs.androidx.room.compiler)
 

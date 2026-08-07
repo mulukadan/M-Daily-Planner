@@ -3,11 +3,12 @@ package com.example.m_dailyplanner
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -32,9 +34,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -68,7 +75,7 @@ private val bottomNavItems = listOf(
     BottomNavItem("report",   "Report",   Icons.Filled.BarChart,     Icons.Outlined.BarChart)
 )
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -108,13 +115,27 @@ class MainActivity : ComponentActivity() {
 
                 val currentUser by authViewModel.currentUser.collectAsState()
                 val showOnboarding by taskViewModel.showOnboarding.collectAsState()
+                val appLockEnabled by dataStoreManager.appLockEnabled.collectAsState(initial = false)
                 var showSplash by remember { mutableStateOf(true) }
+                var isUnlocked by remember { mutableStateOf(false) }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     val launcher = rememberLauncherForActivityResult(
                         ActivityResultContracts.RequestPermission()
                     ) { }
                     LaunchedEffect(Unit) { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                }
+
+                // Re-lock whenever the app is backgrounded, so returning to it re-prompts.
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_STOP) {
+                            isUnlocked = false
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
 
                 when {
@@ -127,6 +148,9 @@ class MainActivity : ComponentActivity() {
                     currentUser == null -> {
                         LoginScreen(authViewModel = authViewModel)
                     }
+                    appLockEnabled && !isUnlocked -> {
+                        AppLockScreen(onUnlock = { isUnlocked = true })
+                    }
                     else -> {
                         MainApp(
                             taskViewModel = taskViewModel,
@@ -134,7 +158,8 @@ class MainActivity : ComponentActivity() {
                             noteViewModel = noteViewModel,
                             authViewModel = authViewModel,
                             reportViewModel = reportViewModel,
-                            habitViewModel = habitViewModel
+                            habitViewModel = habitViewModel,
+                            dataStoreManager = dataStoreManager
                         )
                     }
                 }
@@ -144,7 +169,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppDrawer(currentUser: FirebaseUser?, onClose: () -> Unit, onSignOut: () -> Unit = {}) {
+private fun AppDrawer(
+    currentUser: FirebaseUser?,
+    appLockEnabled: Boolean,
+    onToggleAppLock: (Boolean) -> Unit,
+    onClose: () -> Unit,
+    onSignOut: () -> Unit = {}
+) {
     val displayName = currentUser?.displayName?.takeIf { it.isNotBlank() }
     val email = currentUser?.email?.takeIf { it.isNotBlank() }
     val initial = when {
@@ -214,6 +245,24 @@ private fun AppDrawer(currentUser: FirebaseUser?, onClose: () -> Unit, onSignOut
             )
         }
 
+        // App Lock toggle
+        NavigationDrawerItem(
+            label = { Text("App Lock") },
+            icon = {
+                Icon(
+                    Icons.Default.Fingerprint,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            badge = {
+                Switch(checked = appLockEnabled, onCheckedChange = onToggleAppLock)
+            },
+            selected = false,
+            onClick = { onToggleAppLock(!appLockEnabled) },
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+        )
+
         Spacer(modifier = Modifier.weight(1f))
 
         // Sign out
@@ -257,13 +306,16 @@ private fun MainApp(
     noteViewModel: NoteViewModel,
     authViewModel: AuthViewModel,
     reportViewModel: ReportViewModel,
-    habitViewModel: HabitViewModel
+    habitViewModel: HabitViewModel,
+    dataStoreManager: DataStoreManager
 ) {
     val navController = rememberNavController()
     val currentEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentEntry?.destination?.route
     val topLevelRoutes = setOf("dashboard", "tasks", "habits", "projects", "notes", "report")
     val currentUser by authViewModel.currentUser.collectAsState()
+    val appLockEnabled by dataStoreManager.appLockEnabled.collectAsState(initial = false)
+    val context = LocalContext.current
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -281,6 +333,28 @@ private fun MainApp(
         drawerContent = {
             AppDrawer(
                 currentUser = currentUser,
+                appLockEnabled = appLockEnabled,
+                onToggleAppLock = { enable ->
+                    if (enable) {
+                        val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                        } else {
+                            BiometricManager.Authenticators.BIOMETRIC_STRONG
+                        }
+                        val canAuthenticate = BiometricManager.from(context).canAuthenticate(authenticators)
+                        if (canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS) {
+                            scope.launch { dataStoreManager.setAppLockEnabled(true) }
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "Set up a fingerprint, face unlock, or screen lock in your device settings first",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } else {
+                        scope.launch { dataStoreManager.setAppLockEnabled(false) }
+                    }
+                },
                 onClose = { scope.launch { drawerState.close() } },
                 onSignOut = { authViewModel.signOut() }
             )
