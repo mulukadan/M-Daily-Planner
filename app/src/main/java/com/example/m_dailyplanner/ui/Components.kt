@@ -131,36 +131,11 @@ fun TaskItem(
         }
     )
 
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = swipeEnabled,
-        enableDismissFromEndToStart = swipeEnabled,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val color = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.extendedColors.success
-                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
-                SwipeToDismissBoxValue.Settled -> Color.Transparent
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(color)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            ) {
-                if (direction != SwipeToDismissBoxValue.Settled) {
-                    Icon(
-                        imageVector = if (direction == SwipeToDismissBoxValue.StartToEnd) Icons.Default.CheckCircle else Icons.Default.Delete,
-                        contentDescription = null,
-                        tint = Color.White
-                    )
-                }
-            }
-        }
-    ) {
+    // When drag-reorder is active, SwipeToDismissBox is omitted from the tree entirely
+    // (not just disabled) — even with both directions disabled it still installs its own
+    // horizontal drag detector, which competes with the parent list's long-press-drag
+    // gesture for the same touch and can prevent drag-reorder from ever starting.
+    val cardContent: @Composable () -> Unit = {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -344,6 +319,41 @@ fun TaskItem(
             }
         }
     }
+    }
+
+    if (swipeEnabled) {
+        SwipeToDismissBox(
+            state = dismissState,
+            backgroundContent = {
+                val direction = dismissState.dismissDirection
+                val color = when (direction) {
+                    SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.extendedColors.success
+                    SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
+                    SwipeToDismissBoxValue.Settled -> Color.Transparent
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(color)
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+                ) {
+                    if (direction != SwipeToDismissBoxValue.Settled) {
+                        Icon(
+                            imageVector = if (direction == SwipeToDismissBoxValue.StartToEnd) Icons.Default.CheckCircle else Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        ) {
+            cardContent()
+        }
+    } else {
+        cardContent()
     }
 }
 
