@@ -103,11 +103,24 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
 
-        // v7 → v8: added color and position columns for project cards
+        // v7 → v8: added color and position columns for project cards.
+        // Column-existence checks guard against devices that already have these columns from
+        // an earlier development build where this same change was numbered differently.
         private val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE `projects` ADD COLUMN `color` TEXT NOT NULL DEFAULT '#6750A4'")
-                database.execSQL("ALTER TABLE `projects` ADD COLUMN `position` INTEGER NOT NULL DEFAULT 0")
+                val existingColumns = mutableSetOf<String>()
+                database.query("PRAGMA table_info(`projects`)").use { cursor ->
+                    val nameIndex = cursor.getColumnIndex("name")
+                    while (cursor.moveToNext()) {
+                        existingColumns.add(cursor.getString(nameIndex))
+                    }
+                }
+                if ("color" !in existingColumns) {
+                    database.execSQL("ALTER TABLE `projects` ADD COLUMN `color` TEXT NOT NULL DEFAULT '#6750A4'")
+                }
+                if ("position" !in existingColumns) {
+                    database.execSQL("ALTER TABLE `projects` ADD COLUMN `position` INTEGER NOT NULL DEFAULT 0")
+                }
             }
         }
 
