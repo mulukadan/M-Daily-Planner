@@ -2,9 +2,12 @@ package com.example.m_dailyplanner.ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -16,16 +19,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.example.m_dailyplanner.data.ProjectTask
 import com.example.m_dailyplanner.data.TaskStatus
-import com.example.m_dailyplanner.ui.theme.extendedColors
 import com.example.m_dailyplanner.viewmodel.ProjectViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,22 +133,16 @@ fun ProjectDetailScreen(
                     }
                 }
             } else {
-                LazyColumn(
+                ReorderableProjectTaskList(
+                    tasksFlow = tasks,
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(tasks, key = { it.id }) { task ->
-                        ProjectTaskItem(
-                            task = task,
-                            onStatusChange = { status ->
-                                viewModel.updateTask(task.copy(status = status.name))
-                            },
-                            onEdit = { viewModel.updateTask(it) },
-                            onDelete = { viewModel.deleteTask(task) }
-                        )
-                    }
-                }
+                    onOrderChanged = { viewModel.updateTaskOrder(it) },
+                    onStatusChange = { task, status ->
+                        viewModel.updateTask(task.copy(status = status.name))
+                    },
+                    onEdit = { viewModel.updateTask(it) },
+                    onDelete = { viewModel.deleteTask(it) }
+                )
             }
         }
     }
@@ -165,13 +165,122 @@ fun ProjectDetailScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReorderableProjectTaskList(
+    tasksFlow: List<ProjectTask>,
+    modifier: Modifier = Modifier,
+    onOrderChanged: (List<ProjectTask>) -> Unit,
+    onStatusChange: (ProjectTask, TaskStatus) -> Unit,
+    onEdit: (ProjectTask) -> Unit,
+    onDelete: (ProjectTask) -> Unit
+) {
+    val tasks = remember { mutableStateListOf<ProjectTask>() }
+    var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+    val edgeScrollPx = with(density) { 56.dp.toPx() }
+
+    LaunchedEffect(tasksFlow) {
+        if (draggedItemIndex == null) {
+            tasks.clear()
+            tasks.addAll(tasksFlow)
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier
+            .pointerInput(Unit) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { offset ->
+                        listState.layoutInfo.visibleItemsInfo
+                            .find { item ->
+                                offset.y.toInt() in item.offset..(item.offset + item.size)
+                            }
+                            ?.let {
+                                draggedItemIndex = it.index
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffset += dragAmount.y
+
+                        draggedItemIndex?.let { currentIndex ->
+                            val targetIndex = listState.layoutInfo.visibleItemsInfo
+                                .find { item ->
+                                    change.position.y.toInt() in item.offset..(item.offset + item.size)
+                                }
+                                ?.index
+
+                            if (targetIndex != null && targetIndex != currentIndex && targetIndex < tasks.size) {
+                                tasks.add(targetIndex, tasks.removeAt(currentIndex))
+                                draggedItemIndex = targetIndex
+                                dragOffset = 0f
+                            }
+                        }
+
+                        // Auto-scroll the list when dragging near the top/bottom edge, so a task
+                        // can be reordered into a position that's currently off-screen.
+                        val viewportHeight = listState.layoutInfo.viewportSize.height
+                        val y = change.position.y
+                        when {
+                            y < edgeScrollPx -> coroutineScope.launch { listState.scrollBy(-24f) }
+                            y > viewportHeight - edgeScrollPx ->
+                                coroutineScope.launch { listState.scrollBy(24f) }
+                        }
+                    },
+                    onDragEnd = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onOrderChanged(tasks.toList())
+                        draggedItemIndex = null
+                        dragOffset = 0f
+                    },
+                    onDragCancel = {
+                        draggedItemIndex = null
+                        dragOffset = 0f
+                    }
+                )
+            },
+        contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
+            val isDragging = index == draggedItemIndex
+            val scale by animateFloatAsState(if (isDragging) 1.05f else 1f, label = "projectTaskDragScale")
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        translationY = if (isDragging) dragOffset else 0f
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .zIndex(if (isDragging) 1f else 0f)
+            ) {
+                ProjectTaskItem(
+                    task = task,
+                    onStatusChange = { status -> onStatusChange(task, status) },
+                    onEdit = onEdit,
+                    onDelete = { onDelete(task) },
+                    showDragHandle = true
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ProjectTaskItem(
     task: ProjectTask,
     onStatusChange: (TaskStatus) -> Unit,
     onEdit: (ProjectTask) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    showDragHandle: Boolean = false
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -209,50 +318,6 @@ private fun ProjectTaskItem(
         )
     }
 
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onStatusChange(if (isDone) TaskStatus.PENDING else TaskStatus.COMPLETED)
-                }
-                SwipeToDismissBoxValue.EndToStart -> {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showDeleteConfirm = true
-                }
-                SwipeToDismissBoxValue.Settled -> {}
-            }
-            false
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val color = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.extendedColors.success
-                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
-                SwipeToDismissBoxValue.Settled -> Color.Transparent
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(color)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            ) {
-                if (direction != SwipeToDismissBoxValue.Settled) {
-                    Icon(
-                        imageVector = if (direction == SwipeToDismissBoxValue.StartToEnd) Icons.Default.CheckCircle else Icons.Default.Delete,
-                        contentDescription = null,
-                        tint = Color.White
-                    )
-                }
-            }
-        }
-    ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -295,6 +360,16 @@ private fun ProjectTaskItem(
                     )
                 }
             }
+            if (showDragHandle) {
+                Icon(
+                    Icons.Default.DragHandle,
+                    contentDescription = "Drag to reorder",
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
             Box(modifier = Modifier.padding(end = 4.dp)) {
                 IconButton(onClick = { showMenu = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "Options",
@@ -320,7 +395,6 @@ private fun ProjectTaskItem(
                 }
             }
         }
-    }
     }
 }
 
