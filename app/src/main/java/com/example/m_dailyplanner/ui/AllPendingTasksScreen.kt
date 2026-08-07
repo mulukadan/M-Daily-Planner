@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.m_dailyplanner.data.Task
+import com.example.m_dailyplanner.ui.theme.extendedColors
+import com.example.m_dailyplanner.ui.util.rememberCurrentDate
 import com.example.m_dailyplanner.viewmodel.TaskViewModel
 import java.time.LocalDate
 
@@ -32,7 +34,7 @@ fun AllPendingTasksScreen(
 ) {
     val tasks by viewModel.pendingTasksByPriority.collectAsState()
     var sortMode by remember { mutableStateOf(PendingSortMode.PRIORITY) }
-    val today = remember { LocalDate.now() }
+    val today by rememberCurrentDate()
 
     val groupedTasks: Map<String, List<Task>> = remember(tasks, sortMode, today) {
         when (sortMode) {
@@ -70,13 +72,13 @@ fun AllPendingTasksScreen(
                         Text(
                             text = "All Pending Tasks",
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         if (tasks.isNotEmpty()) {
                             Text(
                                 text = "${tasks.size} task${if (tasks.size != 1) "s" else ""} remaining",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -86,12 +88,12 @@ fun AllPendingTasksScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onPrimary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
         }
@@ -185,16 +187,10 @@ fun AllPendingTasksScreen(
 
 @Composable
 fun PriorityGroupHeader(priority: String, count: Int) {
-    val color = when (priority.uppercase()) {
-        "HIGH" -> Color(0xFFD32F2F)
-        "MEDIUM" -> Color(0xFFF57C00)
-        "LOW" -> Color(0xFF388E3C)
-        else -> MaterialTheme.colorScheme.outline
-    }
     PendingSectionHeader(
         label = priority.replaceFirstChar { it.titlecase() },
         count = count,
-        color = color
+        color = getPriorityColor(priority)
     )
 }
 
@@ -205,7 +201,7 @@ fun DateGroupHeader(group: String, count: Int) {
     when (group) {
         "OVERDUE" -> { label = "Overdue"; color = MaterialTheme.colorScheme.error }
         "TODAY" -> { label = "Today"; color = MaterialTheme.colorScheme.primary }
-        "UPCOMING" -> { label = "Upcoming"; color = Color(0xFF388E3C) }
+        "UPCOMING" -> { label = "Upcoming"; color = MaterialTheme.extendedColors.success }
         else -> { label = group; color = MaterialTheme.colorScheme.outline }
     }
     PendingSectionHeader(label = label, count = count, color = color)

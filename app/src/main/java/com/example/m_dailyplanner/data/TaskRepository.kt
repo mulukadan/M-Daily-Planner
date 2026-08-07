@@ -18,13 +18,16 @@ class TaskRepository(
 
     suspend fun getPendingTasksForDate(date: String): List<Task> = taskDao.getPendingTasksForDate(date)
 
+    suspend fun getPendingTasksBefore(date: String): List<Task> = taskDao.getPendingTasksBefore(date)
+
     suspend fun getUpcomingReminders(today: String, currentTime: String): List<Task> =
         taskDao.getUpcomingReminders(today, currentTime)
 
-    suspend fun insertTask(task: Task): Long {
-        val id = taskDao.insertTask(task)
-        firestoreSync.upsertTask(task.copy(id = id.toInt()))
-        return id
+    suspend fun insertTask(task: Task): Task {
+        val id = taskDao.insertTaskAtEnd(task)
+        val inserted = taskDao.getTaskById(id.toInt()) ?: task.copy(id = id.toInt())
+        firestoreSync.upsertTask(inserted)
+        return inserted
     }
 
     suspend fun updateTask(task: Task) {
@@ -42,8 +45,8 @@ class TaskRepository(
         firestoreSync.deleteTask(task.id)
     }
 
-    suspend fun carryForwardTasks(oldDate: String, newDate: String) {
-        taskDao.carryForwardTasks(oldDate, newDate)
+    suspend fun carryForwardAllPending(newDate: String) {
+        taskDao.carryForwardAllPending(newDate)
         // Sync updated tasks after carry-forward
         taskDao.getAllTasksList()
             .filter { it.date == newDate }

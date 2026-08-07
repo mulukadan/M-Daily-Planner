@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Task::class, Project::class, ProjectTask::class, Note::class, NoteCategory::class],
-    version = 6,
+    entities = [Task::class, Project::class, ProjectTask::class, Note::class, NoteCategory::class, Habit::class, HabitLog::class],
+    version = 7,
     exportSchema = false
 )
 abstract class TaskDatabase : RoomDatabase() {
@@ -19,6 +19,7 @@ abstract class TaskDatabase : RoomDatabase() {
     abstract fun projectTaskDao(): ProjectTaskDao
     abstract fun noteDao(): NoteDao
     abstract fun noteCategoryDao(): NoteCategoryDao
+    abstract fun habitDao(): HabitDao
 
     companion object {
         @Volatile
@@ -87,6 +88,21 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
 
+        // v6 → v7: added habits and habit_logs tables
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `habits` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `color` TEXT NOT NULL DEFAULT '#005AC1', `position` INTEGER NOT NULL DEFAULT 0, `createdAt` INTEGER NOT NULL, `archived` INTEGER NOT NULL DEFAULT 0)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `habit_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `habitId` INTEGER NOT NULL, `date` TEXT NOT NULL, `completedAt` INTEGER NOT NULL)"
+                )
+                database.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_habit_logs_habitId_date` ON `habit_logs` (`habitId`, `date`)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): TaskDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -94,7 +110,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     "mdailyplanner_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                 INSTANCE = instance
                 instance

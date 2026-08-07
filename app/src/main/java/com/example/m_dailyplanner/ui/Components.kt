@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,7 +25,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -33,14 +37,19 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import com.example.m_dailyplanner.data.Task
+import com.example.m_dailyplanner.data.TaskPriority
 import com.example.m_dailyplanner.data.TaskStatus
+import com.example.m_dailyplanner.ui.theme.extendedColors
+import com.example.m_dailyplanner.ui.util.rememberCurrentDate
+import com.example.m_dailyplanner.util.NaturalLanguageDateParser
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TaskItem(
     task: Task,
@@ -55,6 +64,7 @@ fun TaskItem(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var isHighlighted by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
 
     if (showDeleteConfirmDialog) {
         AlertDialog(
@@ -81,16 +91,11 @@ fun TaskItem(
     }
 
     val isDone = task.status == TaskStatus.COMPLETED.name
-    val priorityColor = when (task.priority.lowercase()) {
-        "high" -> Color(0xFFD32F2F)
-        "medium" -> Color(0xFFF57C00)
-        "low" -> Color(0xFF388E3C)
-        else -> MaterialTheme.colorScheme.outline
-    }
+    val priorityColor = getPriorityColor(task.priority)
 
-    val (dateLabel, dateCategory) = remember(task.date) {
+    val today by rememberCurrentDate()
+    val (dateLabel, dateCategory) = remember(task.date, today) {
         val taskDate = runCatching { LocalDate.parse(task.date) }.getOrNull()
-        val today = LocalDate.now()
         val label = when (taskDate) {
             today -> "Today"
             today.plusDays(1) -> "Tomorrow"
@@ -106,6 +111,56 @@ fun TaskItem(
         label to category
     }
 
+    // Swipe right to toggle complete, swipe left to delete. Disabled while manual
+    // drag-reorder is active so the two gestures never fight over the same touch.
+    val swipeEnabled = !showDragHandle
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onStatusChange(if (isDone) TaskStatus.PENDING else TaskStatus.COMPLETED)
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showDeleteConfirmDialog = true
+                }
+                SwipeToDismissBoxValue.Settled -> {}
+            }
+            false // never let the box actually dismiss the row; the callbacks above drive the real state change
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = swipeEnabled,
+        enableDismissFromEndToStart = swipeEnabled,
+        backgroundContent = {
+            val direction = dismissState.dismissDirection
+            val color = when (direction) {
+                SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.extendedColors.success
+                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
+                SwipeToDismissBoxValue.Settled -> Color.Transparent
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(color)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                if (direction != SwipeToDismissBoxValue.Settled) {
+                    Icon(
+                        imageVector = if (direction == SwipeToDismissBoxValue.StartToEnd) Icons.Default.CheckCircle else Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,6 +203,7 @@ fun TaskItem(
             Checkbox(
                 checked = isDone,
                 onCheckedChange = { checked ->
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     val newStatus = if (checked) TaskStatus.COMPLETED else TaskStatus.PENDING
                     onStatusChange(newStatus)
                 },
@@ -190,7 +246,7 @@ fun TaskItem(
                     val dateTint = when (dateCategory) {
                         "past" -> MaterialTheme.colorScheme.error
                         "today" -> MaterialTheme.colorScheme.primary
-                        "future" -> Color(0xFF388E3C)
+                        "future" -> MaterialTheme.extendedColors.success
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     Row(
@@ -288,6 +344,7 @@ fun TaskItem(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -305,6 +362,10 @@ fun ReorderableTaskList(
     var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+    val edgeScrollPx = with(density) { 56.dp.toPx() }
 
     LaunchedEffect(tasksFlow) {
         if (draggedItemIndex == null) {
@@ -324,7 +385,10 @@ fun ReorderableTaskList(
                             .find { item ->
                                 offset.y.toInt() in item.offset..(item.offset + item.size)
                             }
-                            ?.let { draggedItemIndex = it.index }
+                            ?.let {
+                                draggedItemIndex = it.index
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
@@ -343,8 +407,19 @@ fun ReorderableTaskList(
                                 dragOffset = 0f
                             }
                         }
+
+                        // Auto-scroll the list when dragging near the top/bottom edge, so a task
+                        // can be reordered into a position that's currently off-screen.
+                        val viewportHeight = listState.layoutInfo.viewportSize.height
+                        val y = change.position.y
+                        when {
+                            y < edgeScrollPx -> coroutineScope.launch { listState.scrollBy(-24f) }
+                            y > viewportHeight - edgeScrollPx ->
+                                coroutineScope.launch { listState.scrollBy(24f) }
+                        }
                     },
                     onDragEnd = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         onOrderChanged(tasks.toList())
                         draggedItemIndex = null
                         dragOffset = 0f
@@ -435,17 +510,31 @@ fun TimePickerDialog(
     }
 }
 
+private fun formatSuggestedDate(date: LocalDate, today: LocalDate): String = when (date) {
+    today -> "Today"
+    today.plusDays(1) -> "Tomorrow"
+    else -> date.format(DateTimeFormatter.ofPattern("EEE, MMM d"))
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(
+    defaultDate: LocalDate,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String, Boolean) -> Unit
+    onConfirm: (name: String, description: String, date: String, time: String, priority: String, reminderEnabled: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var time by remember { mutableStateOf("") }
     var priority by remember { mutableStateOf("Medium") }
     var reminderEnabled by remember { mutableStateOf(false) }
+    var dateOverride by remember { mutableStateOf<LocalDate?>(null) }
+
+    // Quick-add: typing "tomorrow at 3pm" surfaces a tap-to-apply suggestion rather than
+    // silently rewriting the date, since there's no visible date field in this dialog.
+    val suggestion = remember(name) {
+        NaturalLanguageDateParser.parse(name, defaultDate).takeIf { it.date != null || it.time != null }
+    }
 
     val priorities = listOf("High", "Medium", "Low")
 
@@ -491,9 +580,40 @@ fun AddTaskDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Task Name") },
+                    placeholder = { Text("e.g. Call dentist tomorrow at 3pm") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+                if (suggestion != null) {
+                    SuggestionChip(
+                        onClick = {
+                            dateOverride = suggestion.date
+                            suggestion.time?.let {
+                                time = String.format("%02d:%02d", it.hour, it.minute)
+                            }
+                            name = suggestion.cleanedName
+                        },
+                        icon = {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                        },
+                        label = {
+                            val parts = buildList {
+                                suggestion.date?.let { add(formatSuggestedDate(it, defaultDate)) }
+                                suggestion.time?.let { add(it.format(DateTimeFormatter.ofPattern("h:mm a"))) }
+                            }
+                            Text("Apply detected: ${parts.joinToString(" · ")}")
+                        }
+                    )
+                }
+                if (dateOverride != null) {
+                    AssistChip(
+                        onClick = { dateOverride = null },
+                        leadingIcon = {
+                            Icon(Icons.Default.Event, contentDescription = null, modifier = Modifier.size(16.dp))
+                        },
+                        label = { Text("Adding to ${formatSuggestedDate(dateOverride!!, defaultDate)} · tap to undo") }
+                    )
+                }
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -564,7 +684,8 @@ fun AddTaskDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onConfirm(name, description, time, priority, reminderEnabled)
+                        val resolvedDate = (dateOverride ?: defaultDate).format(DateTimeFormatter.ISO_LOCAL_DATE)
+                        onConfirm(name, description, resolvedDate, time, priority, reminderEnabled)
                     }
                 },
                 enabled = name.isNotBlank()
@@ -583,14 +704,14 @@ fun AddTaskDialog(
 @Composable
 fun StatusBadge(status: TaskStatus) {
     val backgroundColor = when (status) {
-        TaskStatus.COMPLETED -> Color(0xFFE8F5E9)
-        TaskStatus.IN_PROGRESS -> Color(0xFFE3F2FD)
-        TaskStatus.PENDING -> Color(0xFFFFF3E0)
+        TaskStatus.COMPLETED -> MaterialTheme.extendedColors.successContainer
+        TaskStatus.IN_PROGRESS -> MaterialTheme.colorScheme.primaryContainer
+        TaskStatus.PENDING -> MaterialTheme.extendedColors.warningContainer
     }
     val contentColor = when (status) {
-        TaskStatus.COMPLETED -> Color(0xFF2E7D32)
-        TaskStatus.IN_PROGRESS -> Color(0xFF1565C0)
-        TaskStatus.PENDING -> Color(0xFFEF6C00)
+        TaskStatus.COMPLETED -> MaterialTheme.extendedColors.onSuccessContainer
+        TaskStatus.IN_PROGRESS -> MaterialTheme.colorScheme.onPrimaryContainer
+        TaskStatus.PENDING -> MaterialTheme.extendedColors.onWarningContainer
     }
 
     Surface(
@@ -661,12 +782,45 @@ fun InfoCard(
 }
 
 @Composable
+fun EmptyState(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun getPriorityColor(priority: String): Color {
-    return when (priority.lowercase()) {
-        "high" -> Color(0xFFD32F2F)
-        "medium" -> Color(0xFFF57C00)
-        "low" -> Color(0xFF388E3C)
-        else -> MaterialTheme.colorScheme.primary
+    return when (TaskPriority.fromLabel(priority)) {
+        TaskPriority.HIGH -> MaterialTheme.colorScheme.error
+        TaskPriority.MEDIUM -> MaterialTheme.extendedColors.warning
+        TaskPriority.LOW -> MaterialTheme.extendedColors.success
     }
 }
 

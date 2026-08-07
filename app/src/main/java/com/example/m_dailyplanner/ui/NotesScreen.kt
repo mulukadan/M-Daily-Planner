@@ -352,20 +352,14 @@ private fun ManageCategoriesDialog(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            IconButton(
-                                onClick = { onEditCategory(category) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
+                            IconButton(onClick = { onEditCategory(category) }) {
                                 Icon(
                                     Icons.Default.Edit,
                                     contentDescription = "Edit",
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
-                            IconButton(
-                                onClick = { onDeleteCategory(category) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
+                            IconButton(onClick = { onDeleteCategory(category) }) {
                                 Icon(
                                     Icons.Default.Delete,
                                     contentDescription = "Delete",

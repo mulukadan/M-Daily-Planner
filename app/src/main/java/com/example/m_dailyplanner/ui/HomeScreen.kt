@@ -1,5 +1,6 @@
 package com.example.m_dailyplanner.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.m_dailyplanner.data.Task
 import com.example.m_dailyplanner.data.TaskStatus
+import com.example.m_dailyplanner.ui.util.rememberCurrentDate
 import com.example.m_dailyplanner.viewmodel.SortOption
 import com.example.m_dailyplanner.viewmodel.TaskViewModel
 import java.time.LocalDate
@@ -52,18 +54,21 @@ fun HomeScreen(
     var showAddTaskDialog by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
-    val today = remember { LocalDate.now() }
-    val days = remember { (-30..30).map { offset -> today.plusDays(offset.toLong()) } }
+    val today by rememberCurrentDate()
+    val days = remember(today) { (-30..30).map { offset -> today.plusDays(offset.toLong()) } }
+
+    LaunchedEffect(today) { viewModel.refreshToday() }
 
     if (carryForwardEvent != null) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissCarryForward() },
             title = { Text("Unfinished Tasks") },
             text = {
-                Text("You have ${carryForwardEvent!!.count} unfinished tasks from yesterday. Carry them forward to today?")
+                val count = carryForwardEvent!!.count
+                Text("You have $count unfinished task${if (count != 1) "s" else ""} from previous days. Carry ${if (count != 1) "them" else "it"} forward to today?")
             },
             confirmButton = {
-                TextButton(onClick = { viewModel.carryForwardTasks(carryForwardEvent!!.date) }) {
+                TextButton(onClick = { viewModel.carryForwardTasks() }) {
                     Text("Yes")
                 }
             },
@@ -139,6 +144,7 @@ fun HomeScreen(
                 .padding(paddingValues)
         ) {
             WeeklyStrip(
+                today = today,
                 days = days,
                 selectedDate = selectedDate,
                 onDateSelected = { viewModel.setSelectedDate(it) },
@@ -149,16 +155,11 @@ fun HomeScreen(
 
             Box(modifier = Modifier.weight(1f)) {
                 if (tasksFlow.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No tasks found",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    EmptyState(
+                        icon = Icons.Outlined.PendingActions,
+                        title = "No tasks for this day",
+                        subtitle = "Tap + to add your first task"
+                    )
                 } else {
                     ReorderableTaskList(
                         tasksFlow = tasksFlow,
@@ -196,13 +197,14 @@ fun HomeScreen(
 
         if (showAddTaskDialog) {
             AddTaskDialog(
+                defaultDate = runCatching { LocalDate.parse(selectedDate) }.getOrDefault(today),
                 onDismiss = { showAddTaskDialog = false },
-                onConfirm = { name, description, time, priority, reminderEnabled ->
+                onConfirm = { name, description, date, time, priority, reminderEnabled ->
                     viewModel.addTask(
                         Task(
                             name = name,
                             description = description,
-                            date = selectedDate,
+                            date = date,
                             time = time,
                             priority = priority,
                             reminderEnabled = reminderEnabled,
@@ -224,6 +226,7 @@ fun DailyProgressView(tasks: List<Task>) {
     val completedTasks = tasks.count { it.status == TaskStatus.COMPLETED.name }
     val progress = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f
     val percentage = (progress * 100).toInt()
+    val animatedProgress by animateFloatAsState(targetValue = progress, label = "dailyProgress")
 
     Card(
         modifier = Modifier
@@ -254,7 +257,7 @@ fun DailyProgressView(tasks: List<Task>) {
                 )
             }
             LinearProgressIndicator(
-                progress = { progress },
+                progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
@@ -269,13 +272,13 @@ fun DailyProgressView(tasks: List<Task>) {
 
 @Composable
 fun WeeklyStrip(
+    today: LocalDate,
     days: List<LocalDate>,
     selectedDate: String,
     onDateSelected: (String) -> Unit,
     allTasks: List<Task> = emptyList()
 ) {
-    val today = remember { LocalDate.now() }
-    val todayIndex = remember(days) {
+    val todayIndex = remember(days, today) {
         days.indexOfFirst { it.isEqual(today) }.coerceAtLeast(0)
     }
 

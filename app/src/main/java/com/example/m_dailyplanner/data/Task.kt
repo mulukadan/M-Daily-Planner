@@ -31,5 +31,11 @@ enum class TaskStatus(val displayName: String) {
 }
 
 enum class TaskPriority {
-    HIGH, MEDIUM, LOW
+    HIGH, MEDIUM, LOW;
+
+    companion object {
+        /** Parses a free-form priority label (e.g. "High", "medium") into a [TaskPriority], defaulting to MEDIUM. */
+        fun fromLabel(value: String): TaskPriority =
+            entries.find { it.name.equals(value, ignoreCase = true) } ?: MEDIUM
+    }
 }

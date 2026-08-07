@@ -9,6 +9,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -70,8 +71,8 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun MDailyPlannerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = false,
+    // Dynamic color is available on Android 12+; falls back to the hand-picked palette below it.
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -82,7 +83,8 @@ fun MDailyPlannerTheme(
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
-    
+    val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -92,9 +94,12 @@ fun MDailyPlannerTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = Shapes,
+            content = content
+        )
+    }
 }

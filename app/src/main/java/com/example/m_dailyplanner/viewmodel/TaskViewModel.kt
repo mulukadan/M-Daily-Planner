@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.m_dailyplanner.data.*
 import com.example.m_dailyplanner.notification.ReminderScheduler
+import com.example.m_dailyplanner.widget.TodayTasksWidget
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -28,6 +29,10 @@ class TaskViewModel(
     private val _selectedDate = MutableStateFlow(LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
 
+    // True once the user has explicitly picked a date, so refreshToday() stops
+    // auto-advancing the default "today" selection across a midnight rollover.
+    private var userSelectedDate = false
+
     private val _sortOption = MutableStateFlow(SortOption.MANUAL)
     val sortOption: StateFlow<SortOption> = _sortOption.asStateFlow()
 
@@ -43,7 +48,7 @@ class TaskViewModel(
             tasks
                 .filter { it.status != TaskStatus.COMPLETED.name }
                 .sortedWith(compareBy(
-                    { try { TaskPriority.valueOf(it.priority.uppercase()).ordinal } catch (e: Exception) { 1 } },
+                    { TaskPriority.fromLabel(it.priority).ordinal },
                     { it.date }
                 ))
         }
@@ -58,9 +63,7 @@ class TaskViewModel(
     ) { tasks, date, sort ->
         val filtered = tasks.filter { it.date == date }
         val sorted = when (sort) {
-            SortOption.PRIORITY -> filtered.sortedBy {
-                try { TaskPriority.valueOf(it.priority.uppercase()).ordinal } catch (e: Exception) { 1 }
-            }
+            SortOption.PRIORITY -> filtered.sortedBy { TaskPriority.fromLabel(it.priority).ordinal }
             SortOption.TIME -> filtered.sortedBy { it.time.ifEmpty { "23:59" } }
             SortOption.CREATION_DATE -> filtered.sortedByDescending { it.createdAt }
             SortOption.MANUAL -> filtered.sortedBy { it.position }
@@ -88,7 +91,17 @@ class TaskViewModel(
         )
 
     fun setSelectedDate(date: String) {
+        userSelectedDate = true
         _selectedDate.value = date
+    }
+
+    // Called whenever the UI observes a (possibly new) current date, e.g. on resume or at
+    // midnight. Only advances the default "today" selection if the user hasn't manually
+    // navigated to a specific date, so it never overrides an intentional selection.
+    fun refreshToday() {
+        if (!userSelectedDate) {
+            _selectedDate.value = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        }
     }
 
     fun setSortOption(option: SortOption) {
@@ -100,18 +113,19 @@ class TaskViewModel(
 
     fun getTaskById(taskId: Int): Flow<Task?> = repository.getTaskByIdFlow(taskId)
 
+    // Best-effort — the widget also self-refreshes on its periodic update, so a failure
+    // here (e.g. no widget currently placed) should never break the underlying task action.
+    private suspend fun refreshWidget() {
+        runCatching { TodayTasksWidget().updateAll(getApplication()) }
+    }
+
     fun addTask(task: Task) {
         viewModelScope.launch {
-            // Find max position for the date
-            val currentTasks = repository.getTasksForDate(task.date).firstOrNull() ?: emptyList()
-            val maxPos = currentTasks.maxOfOrNull { it.position } ?: -1
-            val newTaskWithPos = task.copy(position = maxPos + 1)
-            
-            val id = repository.insertTask(newTaskWithPos)
-            val finalTask = newTaskWithPos.copy(id = id.toInt())
+            val finalTask = repository.insertTask(task)
             if (finalTask.reminderEnabled && finalTask.time.isNotEmpty()) {
                 ReminderScheduler.scheduleReminder(getApplication(), finalTask)
             }
+            refreshWidget()
         }
     }
 
@@ -125,6 +139,7 @@ class TaskViewModel(
             } else {
                 ReminderScheduler.cancelReminder(getApplication(), task.id)
             }
+            refreshWidget()
         }
     }
 
@@ -141,14 +156,16 @@ class TaskViewModel(
         viewModelScope.launch {
             repository.deleteTask(task)
             ReminderScheduler.cancelReminder(getApplication(), task.id)
+            refreshWidget()
         }
     }
 
-    fun carryForwardTasks(oldDate: String) {
+    fun carryForwardTasks() {
         viewModelScope.launch {
             val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-            repository.carryForwardTasks(oldDate, today)
+            repository.carryForwardAllPending(today)
             dataStoreManager.clearCarryForward()
+            refreshWidget()
         }
     }
 

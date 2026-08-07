@@ -32,10 +32,11 @@ class ProjectRepository(
     fun getTasksForProject(projectId: Int): Flow<List<ProjectTask>> =
         projectTaskDao.getTasksForProject(projectId)
 
-    suspend fun insertTask(task: ProjectTask): Long {
-        val id = projectTaskDao.insertTask(task)
-        firestoreSync.upsertProjectTask(task.copy(id = id.toInt()))
-        return id
+    suspend fun insertTask(task: ProjectTask): ProjectTask {
+        val id = projectTaskDao.insertTaskAtEnd(task)
+        val inserted = projectTaskDao.getTaskById(id.toInt()) ?: task.copy(id = id.toInt())
+        firestoreSync.upsertProjectTask(inserted)
+        return inserted
     }
 
     suspend fun updateTask(task: ProjectTask) {

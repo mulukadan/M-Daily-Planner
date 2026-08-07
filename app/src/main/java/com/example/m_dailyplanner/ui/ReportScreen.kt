@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.m_dailyplanner.ui.theme.extendedColors
 import com.example.m_dailyplanner.viewmodel.AppStats
 import com.example.m_dailyplanner.viewmodel.ReportState
 import com.example.m_dailyplanner.viewmodel.ReportViewModel
@@ -201,7 +202,7 @@ private fun StatsOverview(stats: AppStats) {
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.CheckCircle,
-                iconColor = Color(0xFF2E7D32),
+                iconColor = MaterialTheme.extendedColors.success,
                 label = "Completion",
                 value = "${(stats.completionRate * 100).toInt()}%"
             )
@@ -215,7 +216,7 @@ private fun StatsOverview(stats: AppStats) {
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Warning,
-                iconColor = Color(0xFFD32F2F),
+                iconColor = MaterialTheme.colorScheme.error,
                 label = "Overdue",
                 value = "${stats.overdueTasks}"
             )
@@ -251,9 +252,9 @@ private fun StatsOverview(stats: AppStats) {
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Priority Breakdown", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                PriorityRow("High", stats.highCompleted, stats.highTotal, Color(0xFFD32F2F))
-                PriorityRow("Medium", stats.mediumCompleted, stats.mediumTotal, Color(0xFFF57C00))
-                PriorityRow("Low", stats.lowCompleted, stats.lowTotal, Color(0xFF388E3C))
+                PriorityRow("High", stats.highCompleted, stats.highTotal, MaterialTheme.colorScheme.error)
+                PriorityRow("Medium", stats.mediumCompleted, stats.mediumTotal, MaterialTheme.extendedColors.warning)
+                PriorityRow("Low", stats.lowCompleted, stats.lowTotal, MaterialTheme.extendedColors.success)
             }
         }
     }

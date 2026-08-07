@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Description
@@ -58,6 +59,7 @@ private data class BottomNavItem(
 
 private val bottomNavItems = listOf(
     BottomNavItem("tasks",    "Tasks",    Icons.Filled.Assignment,  Icons.Outlined.Assignment),
+    BottomNavItem("habits",   "Habits",   Icons.Filled.Whatshot,     Icons.Filled.Whatshot),
     BottomNavItem("projects", "Projects", Icons.Filled.Folder,      Icons.Outlined.FolderOpen),
     BottomNavItem("notes",    "Notes",    Icons.Filled.Description,  Icons.Outlined.Description),
     BottomNavItem("report",   "Report",   Icons.Filled.BarChart,     Icons.Outlined.BarChart)
@@ -79,6 +81,7 @@ class MainActivity : ComponentActivity() {
                     ProjectRepository(database.projectDao(), database.projectTaskDao(), firestoreSync)
                 }
                 val noteRepository = remember { NoteRepository(database.noteDao(), database.noteCategoryDao(), firestoreSync) }
+                val habitRepository = remember { HabitRepository(database.habitDao()) }
                 val dataStoreManager = remember { DataStoreManager(applicationContext) }
 
                 val authViewModel: AuthViewModel = viewModel(
@@ -95,6 +98,9 @@ class MainActivity : ComponentActivity() {
                 )
                 val reportViewModel: ReportViewModel = viewModel(
                     factory = ReportViewModelFactory(application, database)
+                )
+                val habitViewModel: HabitViewModel = viewModel(
+                    factory = HabitViewModelFactory(application, habitRepository)
                 )
 
                 val currentUser by authViewModel.currentUser.collectAsState()
@@ -124,7 +130,8 @@ class MainActivity : ComponentActivity() {
                             projectViewModel = projectViewModel,
                             noteViewModel = noteViewModel,
                             authViewModel = authViewModel,
-                            reportViewModel = reportViewModel
+                            reportViewModel = reportViewModel,
+                            habitViewModel = habitViewModel
                         )
                     }
                 }
@@ -246,12 +253,13 @@ private fun MainApp(
     projectViewModel: ProjectViewModel,
     noteViewModel: NoteViewModel,
     authViewModel: AuthViewModel,
-    reportViewModel: ReportViewModel
+    reportViewModel: ReportViewModel,
+    habitViewModel: HabitViewModel
 ) {
     val navController = rememberNavController()
     val currentEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentEntry?.destination?.route
-    val topLevelRoutes = setOf("tasks", "projects", "notes", "report")
+    val topLevelRoutes = setOf("tasks", "habits", "projects", "notes", "report")
     val currentUser by authViewModel.currentUser.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -344,6 +352,14 @@ private fun MainApp(
                 )
             }
 
+            // ── Habits tab ──
+            composable("habits") {
+                HabitsScreen(
+                    viewModel = habitViewModel,
+                    onOpenDrawer = { openDrawer() }
+                )
+            }
+
             // ── Projects tab ──
             composable("projects") {
                 ProjectsScreen(
@@ -359,8 +375,8 @@ private fun MainApp(
                 arguments = listOf(navArgument("projectId") { type = NavType.IntType })
             ) { backStackEntry ->
                 val projectId = backStackEntry.arguments?.getInt("projectId") ?: -1
-                val projectName = projectViewModel.projects.value
-                    .find { it.id == projectId }?.name ?: "Project"
+                val projects by projectViewModel.projects.collectAsState()
+                val projectName = projects.find { it.id == projectId }?.name ?: "Project"
                 ProjectDetailScreen(
                     projectId = projectId,
                     projectName = projectName,

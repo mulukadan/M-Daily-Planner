@@ -52,11 +52,7 @@ class ProjectViewModel(
 
     fun addTask(task: ProjectTask) {
         viewModelScope.launch {
-            val current = _selectedProjectId.value?.let {
-                repository.getTasksForProject(it).firstOrNull()
-            } ?: emptyList()
-            val maxPos = current.maxOfOrNull { it.position } ?: -1
-            repository.insertTask(task.copy(position = maxPos + 1))
+            repository.insertTask(task)
         }
     }
 

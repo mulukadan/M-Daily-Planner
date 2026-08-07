@@ -13,35 +13,29 @@ class DataStoreManager(private val context: Context) {
 
     companion object {
         val CARRY_FORWARD_COUNT = intPreferencesKey("carry_forward_count")
-        val CARRY_FORWARD_DATE = stringPreferencesKey("carry_forward_date")
         val SHOW_ONBOARDING = booleanPreferencesKey("show_onboarding")
     }
 
+    // Count of ALL pending tasks dated before today (not just yesterday's), so tasks
+    // left unfinished across multiple unopened days are never silently dropped from the prompt.
     val carryForwardEvent: Flow<CarryForwardData?> = context.dataStore.data.map { preferences ->
         val count = preferences[CARRY_FORWARD_COUNT] ?: 0
-        val date = preferences[CARRY_FORWARD_DATE] ?: ""
-        if (count > 0 && date.isNotEmpty()) {
-            CarryForwardData(count, date)
-        } else {
-            null
-        }
+        if (count > 0) CarryForwardData(count) else null
     }
 
     val showOnboarding: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[SHOW_ONBOARDING] ?: true
     }
 
-    suspend fun setCarryForward(count: Int, date: String) {
+    suspend fun setCarryForward(count: Int) {
         context.dataStore.edit { preferences ->
             preferences[CARRY_FORWARD_COUNT] = count
-            preferences[CARRY_FORWARD_DATE] = date
         }
     }
 
     suspend fun clearCarryForward() {
         context.dataStore.edit { preferences ->
             preferences.remove(CARRY_FORWARD_COUNT)
-            preferences.remove(CARRY_FORWARD_DATE)
         }
     }
 
@@ -52,4 +46,4 @@ class DataStoreManager(private val context: Context) {
     }
 }
 
-data class CarryForwardData(val count: Int, val date: String)
+data class CarryForwardData(val count: Int)

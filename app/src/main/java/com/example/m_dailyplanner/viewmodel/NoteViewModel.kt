@@ -86,6 +86,10 @@ class NoteViewModel(
 
     fun deleteCategory(category: NoteCategory, onError: (String) -> Unit = {}) {
         viewModelScope.launch {
+            if (category.id == DEFAULT_CATEGORY_ID) {
+                onError("The default category can't be deleted")
+                return@launch
+            }
             val count = repository.getNotesCountByCategory(category.id)
             if (count > 0) {
                 onError("Cannot delete a category that still has notes")

@@ -20,13 +20,14 @@ class CarryForwardWorker(
         val repository = TaskRepository(database.taskDao(), FirestoreSync())
         val dataStoreManager = DataStoreManager(applicationContext)
 
-        val yesterday = LocalDate.now().minusDays(1)
-        val yesterdayString = yesterday.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
-        val pendingTasks = repository.getPendingTasksForDate(yesterdayString)
+        // Count everything still pending from any prior day, not just yesterday, so a
+        // multi-day gap in opening the app never causes older overdue tasks to be missed.
+        val pendingTasks = repository.getPendingTasksBefore(today)
 
         if (pendingTasks.isNotEmpty()) {
-            dataStoreManager.setCarryForward(pendingTasks.size, yesterdayString)
+            dataStoreManager.setCarryForward(pendingTasks.size)
         }
 
         return Result.success()

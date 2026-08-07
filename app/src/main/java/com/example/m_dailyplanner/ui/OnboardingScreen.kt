@@ -16,7 +16,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
 
     val content = when (step) {
         1 -> OnboardingContent(
-            title = "Welcome to DayFlow",
+            title = "Welcome to M-Daily Planner",
             description = "Organize your life one day at a time with our intuitive planner."
         )
         2 -> OnboardingContent(

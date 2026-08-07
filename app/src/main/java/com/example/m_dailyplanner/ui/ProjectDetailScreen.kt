@@ -1,5 +1,6 @@
 package com.example.m_dailyplanner.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,11 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.example.m_dailyplanner.data.ProjectTask
 import com.example.m_dailyplanner.data.TaskStatus
+import com.example.m_dailyplanner.ui.theme.extendedColors
 import com.example.m_dailyplanner.viewmodel.ProjectViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +43,7 @@ fun ProjectDetailScreen(
     val total = tasks.size
     val completed = tasks.count { it.status == TaskStatus.COMPLETED.name }
     val progress = if (total > 0) completed.toFloat() / total else 0f
+    val animatedProgress by animateFloatAsState(targetValue = progress, label = "projectProgress")
 
     Scaffold(
         topBar = {
@@ -47,25 +53,25 @@ fun ProjectDetailScreen(
                         Text(
                             text = projectName,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         if (total > 0) {
                             Text(
                                 text = "$completed/$total tasks done",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
         },
@@ -96,7 +102,7 @@ fun ProjectDetailScreen(
                             Text("$completed/$total (${(progress * 100).toInt()}%)", style = MaterialTheme.typography.bodySmall)
                         }
                         LinearProgressIndicator(
-                            progress = { progress },
+                            progress = { animatedProgress },
                             modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                             color = MaterialTheme.colorScheme.primary,
                             trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.1f)
@@ -159,6 +165,7 @@ fun ProjectDetailScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProjectTaskItem(
     task: ProjectTask,
@@ -169,14 +176,10 @@ private fun ProjectTaskItem(
     var showMenu by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
 
     val isDone = task.status == TaskStatus.COMPLETED.name
-    val priorityColor = when (task.priority.lowercase()) {
-        "high" -> Color(0xFFD32F2F)
-        "medium" -> Color(0xFFF57C00)
-        "low" -> Color(0xFF388E3C)
-        else -> MaterialTheme.colorScheme.outline
-    }
+    val priorityColor = getPriorityColor(task.priority)
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -206,6 +209,50 @@ private fun ProjectTaskItem(
         )
     }
 
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onStatusChange(if (isDone) TaskStatus.PENDING else TaskStatus.COMPLETED)
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showDeleteConfirm = true
+                }
+                SwipeToDismissBoxValue.Settled -> {}
+            }
+            false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            val direction = dismissState.dismissDirection
+            val color = when (direction) {
+                SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.extendedColors.success
+                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error
+                SwipeToDismissBoxValue.Settled -> Color.Transparent
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(color)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                if (direction != SwipeToDismissBoxValue.Settled) {
+                    Icon(
+                        imageVector = if (direction == SwipeToDismissBoxValue.StartToEnd) Icons.Default.CheckCircle else Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -222,6 +269,7 @@ private fun ProjectTaskItem(
             Checkbox(
                 checked = isDone,
                 onCheckedChange = { checked ->
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onStatusChange(if (checked) TaskStatus.COMPLETED else TaskStatus.PENDING)
                 },
                 modifier = Modifier.padding(start = 8.dp)
@@ -272,6 +320,7 @@ private fun ProjectTaskItem(
                 }
             }
         }
+    }
     }
 }
 
