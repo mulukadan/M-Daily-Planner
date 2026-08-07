@@ -7,13 +7,13 @@ import kotlinx.coroutines.flow.Flow
 interface ProjectDao {
 
     @Query("""
-        SELECT p.id, p.name, p.description, p.createdAt,
+        SELECT p.id, p.name, p.description, p.color, p.position, p.createdAt,
                COUNT(pt.id) AS totalTasks,
                COALESCE(SUM(CASE WHEN pt.status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS completedTasks
         FROM projects p
         LEFT JOIN project_tasks pt ON pt.projectId = p.id
         GROUP BY p.id
-        ORDER BY p.createdAt DESC
+        ORDER BY p.position ASC
     """)
     fun getProjectsWithStats(): Flow<List<ProjectWithStats>>
 
@@ -28,6 +28,9 @@ interface ProjectDao {
 
     @Update
     suspend fun updateProject(project: Project)
+
+    @Update
+    suspend fun updateProjects(projects: List<Project>)
 
     @Delete
     suspend fun deleteProject(project: Project)

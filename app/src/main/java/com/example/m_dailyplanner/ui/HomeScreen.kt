@@ -52,6 +52,7 @@ fun HomeScreen(
 
     var showSortSheet by remember { mutableStateOf(false) }
     var showAddTaskDialog by remember { mutableStateOf(false) }
+    var isCarryingForward by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
     val today by rememberCurrentDate()
@@ -59,22 +60,44 @@ fun HomeScreen(
 
     LaunchedEffect(today) { viewModel.refreshToday() }
 
+    // Reset the in-flight flag whenever the event clears (accept or dismiss), so a later,
+    // unrelated carry-forward prompt doesn't open straight into a stuck loading spinner.
+    LaunchedEffect(carryForwardEvent) {
+        if (carryForwardEvent == null) isCarryingForward = false
+    }
+
     if (carryForwardEvent != null) {
         AlertDialog(
-            onDismissRequest = { viewModel.dismissCarryForward() },
+            onDismissRequest = { if (!isCarryingForward) viewModel.dismissCarryForward() },
             title = { Text("Unfinished Tasks") },
             text = {
                 val count = carryForwardEvent!!.count
                 Text("You have $count unfinished task${if (count != 1) "s" else ""} from previous days. Carry ${if (count != 1) "them" else "it"} forward to today?")
             },
             confirmButton = {
-                TextButton(onClick = { viewModel.carryForwardTasks() }) {
-                    Text("Yes")
+                if (isCarryingForward) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                } else {
+                    TextButton(onClick = {
+                        isCarryingForward = true
+                        viewModel.carryForwardTasks()
+                    }) {
+                        Text("Yes")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissCarryForward() }) {
-                    Text("No")
+                if (!isCarryingForward) {
+                    TextButton(onClick = { viewModel.dismissCarryForward() }) {
+                        Text("No")
+                    }
                 }
             }
         )

@@ -133,6 +133,8 @@ class FirestoreSync {
         "id" to id,
         "name" to name,
         "description" to description,
+        "color" to color,
+        "position" to position,
         "createdAt" to createdAt
     )
 
@@ -140,6 +142,8 @@ class FirestoreSync {
         id = (get("id") as? Long)?.toInt() ?: 0,
         name = get("name") as? String ?: "",
         description = get("description") as? String ?: "",
+        color = get("color") as? String ?: DEFAULT_PROJECT_COLOR,
+        position = (get("position") as? Long)?.toInt() ?: 0,
         createdAt = get("createdAt") as? Long ?: System.currentTimeMillis()
     )
 

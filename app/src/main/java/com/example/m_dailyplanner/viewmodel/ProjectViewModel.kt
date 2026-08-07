@@ -28,6 +28,14 @@ class ProjectViewModel(
             if (id == null) flowOf(emptyList())
             else repository.getTasksForProject(id)
         }
+        .map { list ->
+            list.sortedWith(
+                compareBy(
+                    { it.status == TaskStatus.COMPLETED.name },
+                    { it.position }
+                )
+            )
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -39,7 +47,20 @@ class ProjectViewModel(
     }
 
     fun addProject(project: Project) {
-        viewModelScope.launch { repository.insertProject(project) }
+        viewModelScope.launch {
+            val maxPos = projects.value.maxOfOrNull { it.position } ?: -1
+            repository.insertProject(project.copy(position = maxPos + 1))
+        }
+    }
+
+    fun updateProjectOrder(reordered: List<ProjectWithStats>) {
+        viewModelScope.launch {
+            repository.updateProjects(
+                reordered.mapIndexed { i, p ->
+                    Project(id = p.id, name = p.name, description = p.description, color = p.color, position = i, createdAt = p.createdAt)
+                }
+            )
+        }
     }
 
     fun updateProject(project: Project) {

@@ -23,6 +23,11 @@ class ProjectRepository(
         firestoreSync.upsertProject(project)
     }
 
+    suspend fun updateProjects(projects: List<Project>) {
+        projectDao.updateProjects(projects)
+        projects.forEach { firestoreSync.upsertProject(it) }
+    }
+
     suspend fun deleteProject(project: Project) {
         projectDao.deleteTasksForProject(project.id)
         projectDao.deleteProject(project)
