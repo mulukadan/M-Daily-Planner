@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Whatshot
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -58,6 +60,7 @@ private data class BottomNavItem(
 )
 
 private val bottomNavItems = listOf(
+    BottomNavItem("dashboard", "Home",    Icons.Filled.Home,        Icons.Outlined.Home),
     BottomNavItem("tasks",    "Tasks",    Icons.Filled.Assignment,  Icons.Outlined.Assignment),
     BottomNavItem("habits",   "Habits",   Icons.Filled.Whatshot,     Icons.Filled.Whatshot),
     BottomNavItem("projects", "Projects", Icons.Filled.Folder,      Icons.Outlined.FolderOpen),
@@ -259,12 +262,19 @@ private fun MainApp(
     val navController = rememberNavController()
     val currentEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentEntry?.destination?.route
-    val topLevelRoutes = setOf("tasks", "habits", "projects", "notes", "report")
+    val topLevelRoutes = setOf("dashboard", "tasks", "habits", "projects", "notes", "report")
     val currentUser by authViewModel.currentUser.collectAsState()
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val openDrawer = { scope.launch { drawerState.open() } }
+    val navigateToTab: (String) -> Unit = { route ->
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -284,15 +294,7 @@ private fun MainApp(
                         val selected = currentRoute == item.route
                         NavigationBarItem(
                             selected = selected,
-                            onClick = {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { navigateToTab(item.route) },
                             icon = {
                                 Icon(
                                     if (selected) item.selectedIcon else item.unselectedIcon,
@@ -308,9 +310,26 @@ private fun MainApp(
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = "tasks",
+            startDestination = "dashboard",
             modifier = Modifier.padding(padding)
         ) {
+            // ── Dashboard (landing page) ──
+            composable("dashboard") {
+                DashboardScreen(
+                    taskViewModel = taskViewModel,
+                    habitViewModel = habitViewModel,
+                    projectViewModel = projectViewModel,
+                    userName = currentUser?.displayName,
+                    onOpenDrawer = { openDrawer() },
+                    onTaskClick = { taskId -> navController.navigate("task_detail/$taskId") },
+                    onProjectClick = { projectId -> navController.navigate("project_detail/$projectId") },
+                    onNavigateToTasks = { navigateToTab("tasks") },
+                    onNavigateToPending = { navController.navigate("pending_tasks") },
+                    onNavigateToHabits = { navigateToTab("habits") },
+                    onNavigateToProjects = { navigateToTab("projects") }
+                )
+            }
+
             // ── Tasks tab ──
             composable("tasks") {
                 HomeScreen(
