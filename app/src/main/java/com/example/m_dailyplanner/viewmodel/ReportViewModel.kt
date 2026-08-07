@@ -64,11 +64,11 @@ class ReportViewModel(
     fun generateReport() {
         viewModelScope.launch {
             _state.value = ReportState.Loading
-            runCatching {
+            try {
                 val stats = collectStats()
                 val report = buildReport(stats)
                 _state.value = ReportState.Success(report, stats)
-            }.onFailure { e ->
+            } catch (e: Exception) {
                 _state.value = ReportState.Error(e.message ?: "Something went wrong")
             }
         }

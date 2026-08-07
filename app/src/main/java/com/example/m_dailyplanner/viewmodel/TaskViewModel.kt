@@ -117,7 +117,11 @@ class TaskViewModel(
     // here (e.g. no widget currently placed) should never break the underlying task action.
     private suspend fun refreshWidget() {
         val context = getApplication<Application>()
-        runCatching { TodayTasksWidget().updateAll(context) }
+        try {
+            TodayTasksWidget().updateAll(context)
+        } catch (e: Exception) {
+            // Best-effort — see the comment above.
+        }
     }
 
     fun addTask(task: Task) {
