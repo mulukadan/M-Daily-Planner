@@ -116,7 +116,8 @@ class TaskViewModel(
     // Best-effort — the widget also self-refreshes on its periodic update, so a failure
     // here (e.g. no widget currently placed) should never break the underlying task action.
     private suspend fun refreshWidget() {
-        runCatching { TodayTasksWidget().updateAll(getApplication()) }
+        val context = getApplication<Application>()
+        runCatching { TodayTasksWidget().updateAll(context) }
     }
 
     fun addTask(task: Task) {
