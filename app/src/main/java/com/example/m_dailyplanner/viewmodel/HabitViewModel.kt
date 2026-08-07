@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.m_dailyplanner.data.Habit
 import com.example.m_dailyplanner.data.HabitLog
 import com.example.m_dailyplanner.data.HabitRepository
+import com.example.m_dailyplanner.util.HabitStreakCalculator
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -39,8 +40,8 @@ class HabitViewModel(
             HabitWithStreak(
                 habit = habit,
                 completedToday = habitLogs.any { it.date == today },
-                currentStreak = currentStreak(dates),
-                bestStreak = bestStreak(dates)
+                currentStreak = HabitStreakCalculator.currentStreak(dates),
+                bestStreak = HabitStreakCalculator.bestStreak(dates)
             )
         }
     }.stateIn(
@@ -65,33 +66,6 @@ class HabitViewModel(
         viewModelScope.launch {
             repository.toggleLog(habitId, LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
         }
-    }
-
-    // Consecutive completed days ending today (or ending yesterday if today isn't logged
-    // yet, so the streak doesn't reset to 0 the moment the clock ticks past midnight).
-    private fun currentStreak(dates: Set<LocalDate>): Int {
-        if (dates.isEmpty()) return 0
-        val today = LocalDate.now()
-        var cursor = if (today in dates) today else today.minusDays(1)
-        if (cursor !in dates) return 0
-        var streak = 0
-        while (cursor in dates) {
-            streak++
-            cursor = cursor.minusDays(1)
-        }
-        return streak
-    }
-
-    private fun bestStreak(dates: Set<LocalDate>): Int {
-        if (dates.isEmpty()) return 0
-        val sorted = dates.sorted()
-        var best = 1
-        var current = 1
-        for (i in 1 until sorted.size) {
-            current = if (sorted[i] == sorted[i - 1].plusDays(1)) current + 1 else 1
-            best = maxOf(best, current)
-        }
-        return best
     }
 }
 

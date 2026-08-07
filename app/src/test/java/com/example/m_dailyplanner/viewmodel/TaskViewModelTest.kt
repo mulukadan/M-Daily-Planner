@@ -44,10 +44,11 @@ class TaskViewModelTest {
     @Test
     fun `addTask should call repository insert`() = runTest {
         val task = Task(name = "Test Task", description = "", date = "2023-10-10", time = "", reminderEnabled = false, status = "PENDING")
-        
+        coEvery { repository.insertTask(task) } returns task
+
         viewModel.addTask(task)
         advanceUntilIdle()
-        
+
         coVerify { repository.insertTask(task) }
     }
 
@@ -64,19 +65,18 @@ class TaskViewModelTest {
 
     @Test
     fun `carryForwardTasks should call repository carryForward and clear DataStore`() = runTest {
-        val oldDate = "2023-10-09"
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-        
-        viewModel.carryForwardTasks(oldDate)
+
+        viewModel.carryForwardTasks()
         advanceUntilIdle()
-        
-        coVerify { repository.carryForwardTasks(oldDate, today) }
+
+        coVerify { repository.carryForwardAllPending(today) }
         coVerify { dataStoreManager.clearCarryForward() }
     }
 
     @Test
     fun `carryForwardEvent should emit correct data`() = runTest {
-        val carryData = CarryForwardData(5, "2023-10-09")
+        val carryData = CarryForwardData(5)
         every { dataStoreManager.carryForwardEvent } returns flowOf(carryData)
         
         // Re-init viewModel to pick up the new flow
